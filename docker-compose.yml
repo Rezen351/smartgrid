@@ -1,6 +1,17 @@
 
 
 services:
+  nginx:
+    image: nginx:alpine
+    container_name: smartgrid-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - smartgrid-network
+
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: smartgrid-mosquitto
@@ -14,6 +25,22 @@ services:
     networks:
       - smartgrid-network
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    user: "0"
+    command:
+      - "tunnel"
+      - "run"
+      - "--token"
+      - "${CLOUDFLARED_TUNNEL_TOKEN}"
+      - "smartfarm-tunnel"
+    environment:
+      CLOUDFLARED_TUNNEL_TOKEN: "${CLOUDFLARED_TUNNEL_TOKEN}"
+    depends_on:
+      - nginx
+    networks:
+      - smartgrid-network
 
 networks:
   smartgrid-network:
