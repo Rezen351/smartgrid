@@ -1,48 +1,115 @@
-
-
 services:
   nginx:
     image: nginx:alpine
     container_name: smartgrid-nginx
     ports:
-      - "80:80"
+      - "3001:80"
     volumes:
-      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - mosquitto
+      - grafana
+      - influxdb3
+    networks: [ smartgrid-network ]
     restart: unless-stopped
-    networks:
-      - smartgrid-network
 
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: smartgrid-mosquitto
     ports:
       - "1883:1883"
-      - "9001:9001"
     volumes:
-      - ./infra/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./volumes/mosquitto:/mosquitto/data
+      - ./volumes/mosquitto/log:/mosquitto/log
+    networks: [ smartgrid-network ]
     restart: unless-stopped
-    networks:
-      - smartgrid-network
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    user: "0"
+  influxdb3:
+    image: influxdb:3-core
+    container_name: smartgrid-influxdb3
     command:
-      - "tunnel"
-      - "run"
-      - "--token"
-      - "${CLOUDFLARED_TUNNEL_TOKEN}"
-      - "smartfarm-tunnel"
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3
+      - --plugin-dir=/var/lib/influxdb3/plugins
     environment:
-      CLOUDFLARED_TUNNEL_TOKEN: "${CLOUDFLARED_TUNNEL_TOKEN}"
+      INFLUXDB3_DB: ${INFLUXDB_DB:-smartgrid_data}
+    volumes:
+      - ./volumes/influxdb3:/var/lib/influxdb3
+    ports:
+      - "8181:8181"
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartgrid-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartgrid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-smartgrid}
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smartgrid-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:3001/grafana/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
     depends_on:
-      - nginx
-    networks:
-      - smartgrid-network
+      - postgres
+      - influxdb3
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: smartgrid-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./volumes/prometheus:/prometheus
+    ports:
+      - "9090:9090"
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.50.0
+    container_name: smartgrid-cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - "8080:8080"
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: wrouesnel/postgres_exporter:latest
+    container_name: smartgrid-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_DSN:-postgresql://${POSTGRES_USER:-smartgrid}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-smartgrid}?sslmode=disable}
+    ports:
+      - "9187:9187"
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
 
 networks:
   smartgrid-network:
     driver: bridge
-

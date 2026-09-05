@@ -1,25 +1,38 @@
 # SmartGrid
 
-SmartGrid adalah project aplikasi dan infrastruktur berbasis Docker untuk mengelola layanan seperti Nginx, Mosquitto, dan integrasi Cloudflare Tunnel.
+<div align="center">
 
-## 1. Tujuan Proyek
+[![Docker](https://img.shields.io/badge/Docker-Containers-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Docker Compose](https://img.shields.io/badge/Docker_Compose-Orchestration-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![InfluxDB](https://img.shields.io/badge/InfluxDB-Time_Series-22BCF2?logo=influxdb&logoColor=white)](https://www.influxdata.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Relational-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Grafana](https://img.shields.io/badge/Grafana-Visualization-F46800?logo=grafana&logoColor=white)](https://grafana.com/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C?logo=prometheus&logoColor=white)](https://prometheus.io/)
+[![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-660066?logo=eclipse&logoColor=white)](https://mosquitto.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**Infrastruktur Docker Compose untuk layanan Smart Grid IoT, time-series database, dan monitoring stack.**
+
+</div>
+
+## Tujuan Proyek
 
 Project ini dirancang untuk:
-- menjalankan layanan aplikasi dalam environment yang konsisten,
-- mempermudah kolaborasi antar developer,
-- menstandarkan proses deployment menggunakan pola CI/CD,
-- menjaga struktur konfigurasi yang aman dan mudah dikelola.
+- Menjalankan layanan aplikasi dalam environment yang konsisten,
+- Mempermudah kolaborasi antar developer,
+- Menstandarkan proses deployment menggunakan pola CI/CD,
+- Menjaga struktur konfigurasi yang aman dan mudah dikelola.
 
-## 2. Prasyarat
+## Prasyarat
 
 Pastikan perangkat Anda sudah memiliki:
-- Docker
-- Docker Compose
-- Git
-- Node.js / runtime lain sesuai kebutuhan aplikasi (jika project backend/frontend ditambahkan)
-- File `.env` yang berisi konfigurasi sensitif seperti token tunnel
 
-## 3. Setup Awal
+- [Docker](https://www.docker.com/get-started)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+- [Git](https://git-scm.com/downloads)
+- File `.env` yang berisi konfigurasi sensitif
+
+## Setup Awal
 
 Clone repository:
 
@@ -37,7 +50,17 @@ cp .env.example .env
 Atau buat file `.env` jika belum ada dengan konten seperti:
 
 ```env
-CLOUDFLARED_TUNNEL_TOKEN=your_cloudflared_tunnel_token_here
+INFLUXDB_ADMIN_USER=admin
+INFLUXDB_ADMIN_PASSWORD=<influxdb_password>
+INFLUXDB_ORG=smartgrid
+INFLUXDB_BUCKET=smartgrid_data
+
+POSTGRES_USER=smartgrid
+POSTGRES_PASSWORD=<postgres_password>
+POSTGRES_DB=smartgrid
+
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<grafana_password>
 ```
 
 Jalankan layanan:
@@ -58,28 +81,88 @@ Cek konfigurasi Docker Compose:
 docker compose config
 ```
 
-## 4. Struktur Project
+## Arsitektur
+
+Stack SmartGrid terdiri dari:
+
+| Service | Port | Fungsi | Status |
+|---|---|---|---|
+| **nginx** | `3001` | Reverse proxy | Aktif |
+| **mosquitto** | `1883` | MQTT broker untuk IoT | Aktif |
+| **influxdb3** | `8181` | Time-series database untuk sensor data | Aktif |
+| **postgres** | `5432` | Relational database untuk metadata | Aktif |
+| **grafana** | `3000` (internal) | Visualization dashboard | Aktif, via nginx /grafana/ |
+| **prometheus** | `9090` | Metrics scraping & alerting | Aktif |
+| **cadvisor** | `8080` | Container metrics exporter | Aktif |
+| **postgres-exporter** | `9187` | PostgreSQL metrics exporter | Aktif |
+
+> **Catatan:** 
+> - InfluxDB digunakan dalam mode v3 Core. Port yang dipublish adalah `8181` (HTTP).
+> - Grafana tidak dipublish ke host, diakses melalui reverse proxy nginx di `http://localhost:3001/grafana/`.
+
+### Data Flow Monitoring
+
+```text
+cadvisor:8080 ─┐
+               ├──► prometheus:9090 ──► grafana:3000 (internal, via nginx /grafana/)
+postgres-exporter:9187 ─┘
+```
+
+## Struktur Project
 
 ```text
 smartgrid/
 ├── docker-compose.yml
 ├── .env
+├── .env.example
 ├── README.md
 ├── infra/
 │   ├── nginx/
 │   │   └── default.conf
-│   └── mosquitto/
-│       └── config/
-│           └── mosquitto.conf
+│   ├── mosquitto/
+│   │   └── config/
+│   │       ├── mosquitto.conf
+│   │       ├── acl.acl
+│   │       └── passwd
+│   ├── postgres/
+│   │   └── init/
+│   ├── grafana/
+│   │   ├── provisioning/
+│   │   └── dashboards/
+│   └── prometheus/
+│       └── prometheus.yml
 ├── services/
 ├── volumes/
-│   └── mosquitto/
-│       ├── data/
-│       └── logs/
+│   ├── mosquitto/
+│   │   ├── data/
+│   │   └── log/
+│   ├── influxdb/
+│   ├── postgres/
+│   ├── grafana/
+│   └── prometheus/
 └── docs/
 ```
 
-## 5. Standar Kolaborasi Developer
+## Monitoring
+
+Stack monitoring menggunakan **Prometheus** + **Grafana**:
+
+### Prometheus
+- Scrape metrics dari cadvisor, postgres-exporter, influxdb, grafana
+- Konfigurasi scrape di `infra/prometheus/prometheus.yml`
+- UI: `http://localhost:9090`
+
+### cAdvisor
+- Ekspos metrics container Docker (CPU, memory, network, disk)
+- UI: `http://localhost:8080`
+
+### Grafana
+- Dashboard visualization
+- Bisa diintegrasikan dengan Prometheus sebagai data source
+- Akses via nginx: `http://localhost:3001/grafana/`
+- Dashboard System Monitoring: `http://localhost:3001/grafana/d/system-monitoring/system-monitoring`
+
+## Standar Kolaborasi Developer
 
 ### Branching Strategy
 
@@ -106,9 +189,9 @@ Gunakan pola branch berikut:
 Gunakan pesan commit yang konsisten, misalnya:
 
 ```bash
-git commit -m "feat: add nginx default config"
-git commit -m "fix: resolve mosquitto volume path"
-git commit -m "docs: update collaboration workflow"
+git commit -m "feat: add prometheus monitoring"
+git commit -m "fix: resolve postgres volume path"
+git commit -m "docs: update architecture diagram"
 ```
 
 Format rekomendasi:
@@ -122,14 +205,14 @@ Format rekomendasi:
 ### Pull Request Checklist
 
 Sebelum merge, pastikan:
-- kode sudah di-review oleh rekan tim,
-- tidak ada konflik merge,
-- konfigurasi environment aman dan tidak di-commit token sensitif,
-- validasi Docker Compose berhasil,
-- dokumentasi diperbarui bila perlu,
-- semua test / validation pipeline berhasil.
+- [ ] Kode sudah di-review oleh rekan tim
+- [ ] Tidak ada konflik merge
+- [ ] Konfigurasi environment aman dan tidak di-commit token sensitif
+- [ ] Validasi Docker Compose berhasil
+- [ ] Dokumentasi diperbarui bila perlu
+- [ ] Semua test / validation pipeline berhasil
 
-## 6. CI/CD
+## CI/CD
 
 Project ini mengikuti pola CI/CD dasar dengan tahapan berikut:
 
@@ -166,7 +249,7 @@ npm run test
 npm run build
 ```
 
-## 7. Keamanan dan Environment
+## Keamanan dan Environment
 
 Beberapa aturan penting:
 - Jangan commit token atau secret ke repository.
@@ -175,15 +258,15 @@ Beberapa aturan penting:
 - Gunakan variabel environment pada pipeline CI/CD dan deployment.
 - Hindari hardcode URL atau credential di source code.
 
-## 8. Deployment Notes
+## Deployment Notes
 
 Untuk deployment:
 - pastikan Docker Compose berjalan di environment target,
 - validasi port yang digunakan tidak bentrok,
 - pastikan volume data dan konfigurasi bersifat persistent,
-- cocokkan token Cloudflare atau secret pada environment deployment.
+- cocokkan token atau secret pada environment deployment.
 
-## 9. Rekomendasi Tim
+## Rekomendasi Tim
 
 Untuk menjaga kualitas proyek:
 - gunakan review code secara rutin,
@@ -192,7 +275,7 @@ Untuk menjaga kualitas proyek:
 - lakukan testing sebelum merge ke branch utama,
 - update README ketika arsitektur atau setup berubah.
 
-## 10. Quick Start
+## Quick Start
 
 ```bash
 docker compose up -d
@@ -206,5 +289,3 @@ docker compose config
 ```
 
 ---
-
-Dokumentasi ini bertujuan agar proses pengembangan dan deployment konsisten, aman, dan mudah dikelola oleh seluruh developer yang terlibat dalam project SmartGrid.
