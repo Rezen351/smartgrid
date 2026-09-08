@@ -1,0 +1,6 @@
+tunnel: smartgrid-tunnel
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: smartgrid.yourdomain.com
+    service: http://nginx:80
+  - service: http_status:404

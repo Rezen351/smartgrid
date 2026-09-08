@@ -8,8 +8,57 @@ services:
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - mosquitto
+      - nats
+      - module
       - grafana
-      - influxdb3
+      - dashboard
+      - auth
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: smartgrid-nginx-exporter
+    command:
+      - '-nginx.scrape-uri=http://nginx:80/nginx_status'
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: smartgrid-cloudflared
+    command: [ "tunnel", "run" ]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./infra/cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    depends_on:
+      - nginx
+      - mosquitto
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: smartgrid-nats
+    command: [ "--jetstream", "--store_dir", "/data", "--http_port", "8222" ]
+    volumes:
+      - ./volumes/nats:/data
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  redis-shared:
+    image: redis:7-alpine
+    container_name: smartgrid-redis-shared
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./volumes/redis:/data
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: smartgrid-redis-exporter
+    environment:
+      REDIS_ADDR: redis://redis-shared:6379
     networks: [ smartgrid-network ]
     restart: unless-stopped
 
@@ -19,57 +68,37 @@ services:
     ports:
       - "1883:1883"
     volumes:
+      - ./infra/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./volumes/mosquitto:/mosquitto/data
       - ./volumes/mosquitto/log:/mosquitto/log
     networks: [ smartgrid-network ]
     restart: unless-stopped
-
-  influxdb3:
-    image: influxdb:3-core
-    container_name: smartgrid-influxdb3
-    command:
-      - influxdb3
-      - serve
-      - --node-id=node0
-      - --object-store=file
-      - --data-dir=/var/lib/influxdb3
-      - --plugin-dir=/var/lib/influxdb3/plugins
+  mosquitto-exporter:
+    image: kiran94/mosquitto-exporter:latest
+    container_name: smartgrid-mosquitto-exporter
     environment:
-      INFLUXDB3_DB: ${INFLUXDB_DB:-smartgrid_data}
-    volumes:
-      - ./volumes/influxdb3:/var/lib/influxdb3
-    ports:
-      - "8181:8181"
-    networks: [ smartgrid-network ]
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: smartgrid-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-smartgrid}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-smartgrid}
-    volumes:
-      - ./volumes/postgres:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_TOPIC: $SYS/#
     networks: [ smartgrid-network ]
     restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
     container_name: smartgrid-grafana
+    ports:
+      - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:3001/grafana/}
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SERVER_ROOT_URL: http://localhost:3000/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
     volumes:
       - ./volumes/grafana:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
-      - postgres
-      - influxdb3
+      - postgres-dashboard
     networks: [ smartgrid-network ]
     restart: unless-stopped
 
@@ -100,16 +129,151 @@ services:
     networks: [ smartgrid-network ]
     restart: unless-stopped
 
-  postgres-exporter:
+  #===============Service Dashboard=====================
+  dashboard:
+    build:
+      context: ./services/dashboard
+      dockerfile: Dockerfile
+    container_name: smartgrid-dashboard
+    environment:
+      DB_HOST: postgres-dashboard
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-smartgrid}
+      DB_USER: ${POSTGRES_USER:-smartgrid}
+      DB_PASS: ${POSTGRES_PASSWORD}
+      MAX_INTERVAL_SECONDS: 300
+      AUTH_SECRET: ${JWT_SECRET}
+    depends_on:
+      - postgres-dashboard
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  postgres-dashboard:
+    image: postgres:16-alpine
+    container_name: smartgrid-postgres-dashboard
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartgrid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-smartgrid}
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  postgres-dashboard-exporter:
     image: wrouesnel/postgres_exporter:latest
     container_name: smartgrid-postgres-exporter
     environment:
-      DATA_SOURCE_NAME: ${POSTGRES_DSN:-postgresql://${POSTGRES_USER:-smartgrid}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-smartgrid}?sslmode=disable}
-    ports:
-      - "9187:9187"
+      DATA_SOURCE_NAME: ${POSTGRES_DSN:-postgresql://${POSTGRES_USER:-smartgrid}:${POSTGRES_PASSWORD}@postgres-dashboard:5432/${POSTGRES_DB:-smartgrid}?sslmode=disable}
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  #===============Service Auth=====================
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: smartgrid-postgres-auth
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER:-auth_user}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
+    volumes:
+      - ./volumes/postgres-auth:/var/lib/postgresql/data
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: smartgrid-auth
+    environment:
+      PORT: 8080
+      DB_DSN: postgresql://${AUTH_DB_USER:-auth_user}:${AUTH_DB_PASSWORD}@postgres-auth:5432/${AUTH_DB_NAME:-auth_db}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: 15m
+      REFRESH_EXPIRY: 168h
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      ADMIN_USERNAME: ${AUTH_ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-admin@smartgrid.local}
+      ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD}
+    depends_on:
+      - postgres-auth
+      - nats
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  postgres-auth-exporter:
+    image: wrouesnel/postgres_exporter:latest
+    container_name: smartgrid-postgres-auth-exporter
+    environment:
+      DATA_SOURCE_NAME: ${AUTH_POSTGRES_DSN:-postgresql://${AUTH_DB_USER:-auth_user}:${AUTH_DB_PASSWORD}@postgres-auth:5432/${AUTH_DB_NAME:-auth_db}?sslmode=disable}
     networks: [ smartgrid-network ]
     restart: unless-stopped
 
+  #===============Service Module=====================
+  module:
+    build:
+      context: ./services/module
+      dockerfile: Dockerfile
+    container_name: module
+    environment:
+      PORT: 8080
+      DB_DSN: ${MODULE_DB_DSN:-module_user:module_pass@tcp(mariadb-module:3306)/module_db?parseTime=true&charset=utf8mb4}
+      TIMESCALE_DSN: ${TIMESCALE_DSN:-postgres://module_user:module_pass@timescaledb-module:5432/module_ts?sslmode=disable}
+      REDIS_ADDR: redis-shared:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      JWT_SECRET: ${JWT_SECRET}
+      MQTT_URL: ${MQTT_URL:-tcp://mosquitto:1883}
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASS: ${MQTT_PASS:-}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-module}
+      MQTT_TOPIC_PREFIX: ${MQTT_TOPIC_PREFIX:-smartfarm}
+    depends_on:
+      - mariadb-module
+      - timescaledb-module
+      - redis-shared
+      - nats
+      - mosquitto
+      - auth
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  mariadb-module:
+    image: mariadb:11.4
+    container_name: smartgrid-mariadb-module
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MODULE_DB_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MODULE_DB_NAME:-module_db}
+      MYSQL_USER: ${MODULE_DB_USER:-module_user}
+      MYSQL_PASSWORD: ${MODULE_DB_PASSWORD:-module_pass}
+    volumes:
+      - ./volumes/mariadb-module:/var/lib/mysql
+      - ./infra/mariadb/module/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: [ "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci" ]
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  mariadb-module-exporter:
+    image: prom/mysqld-exporter:latest
+    container_name: smartgrid-mariadb-module-exporter
+    environment:
+      DATA_SOURCE_NAME: ${MODULE_DB_DSN:-module_user:module_pass@tcp(mariadb-module:3306)/module_db}
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+
+  timescaledb-module:
+    image: timescale/timescaledb:latest-pg16
+    container_name: smartgrid-timescaledb-module
+    environment:
+      POSTGRES_USER: ${TIMESCALE_DB_USER:-module_user}
+      POSTGRES_PASSWORD: ${TIMESCALE_DB_PASSWORD:-module_pass}
+      POSTGRES_DB: ${TIMESCALE_DB_NAME:-module_ts}
+    volumes:
+      - ./volumes/timescaledb-module:/var/lib/postgresql/data
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  timescaledb-exporter:
+    image: wrouesnel/postgres_exporter:latest
+    container_name: smartgrid-timescaledb-exporter
+    environment:
+      DATA_SOURCE_NAME: ${TIMESCALE_DSN:-postgres://module_user:module_pass@timescaledb-module:5432/module_ts?sslmode=disable}
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
 networks:
   smartgrid-network:
     driver: bridge
