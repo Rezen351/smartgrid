@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="dashboard" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="9" rx="1"/><rect x="4" y="17" width="6" height="3" rx="1"/><rect x="14" y="11" width="6" height="9" rx="1"/><rect x="14" y="4" width="6" height="3" rx="1"/></symbol>
+  <symbol id="dispatch" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></symbol>
+  <symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
+  <symbol id="risk" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v4m0 3h.01"/></symbol>
+  <symbol id="generator" viewBox="0 0 32 32"><rect x="4" y="8" width="24" height="17" rx="2"/><path d="M8 8V5h8v3M9 17h5l2-4 3 8 2-4h3M9 25v3m14-3v3"/></symbol>
+  <symbol id="solar" viewBox="0 0 32 32"><circle cx="24" cy="7" r="3"/><path d="M24 1v2m0 8v2m-6-6h2m8 0h2M7 13h14l3 12H4l3-12Zm2 4h10m-12 4h16m-12-8-2 12m8-12 2 12M14 25v4"/></symbol>
+  <symbol id="battery" viewBox="0 0 32 32"><rect x="5" y="8" width="22" height="18" rx="2"/><path d="M12 5h8v3m-4 4v10m-5-5h10"/></symbol>
+  <symbol id="load" viewBox="0 0 32 32"><path d="M5 27h22M8 27V13l8-6 8 6v14M12 27v-8h8v8M12 14h2m4 0h2"/></symbol>
+  <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2"/></symbol>
+  <symbol id="cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .8-7.9A6 6 0 0 0 6.4 8.5 4.8 4.8 0 0 0 7 18Z"/></symbol>
+  <symbol id="fuel" viewBox="0 0 24 24"><path d="M5 21V4h10v17M4 21h13M8 8h4m3-1h2l2 3v7a2 2 0 0 0 4 0v-5l-2-2"/></symbol>
+  <symbol id="trend-down" viewBox="0 0 24 24"><path d="m4 7 6 6 4-4 6 6m0-5v5h-5"/></symbol>
+</svg>

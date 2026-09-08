@@ -1,0 +1,472 @@
+openapi: 3.0.3
+info:
+  title: SmartGrid Dashboard API
+  version: 1.0.0
+  description: REST API untuk dashboard monitoring microgrid (PV, BESS, Grid, Load, DSS).
+
+servers:
+  - url: http://localhost:5000
+    description: Flask dashboard service
+
+paths:
+  /health/ready:
+    get:
+      tags: [System]
+      summary: Health check koneksi database
+      responses:
+        "200":
+          description: Database siap
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        "503":
+          description: Database tidak siap
+
+  /api/v1/data:
+    get:
+      tags: [Realtime]
+      summary: Data realtime sensor, billing, estimasi, dan status DSS
+      responses:
+        "200":
+          description: Data realtime
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeData'
+        "500":
+          description: Error pengambilan data
+
+  /api/v1/sensor/history:
+    get:
+      tags: [History]
+      summary: 60 titik data sensor terakhir (PV, inverter, load, SOC, grid)
+      responses:
+        "200":
+          description: Daftar history sensor
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SensorHistoryRow'
+
+  /api/v1/control/history:
+    get:
+      tags: [History]
+      summary: 20 keputusan DSS terakhir
+      responses:
+        "200":
+          description: Daftar history kontrol
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ControlHistoryRow'
+
+  /api/v1/dashboard/meta:
+    get:
+      tags: [Dashboard]
+      summary: Metadata untuk dashboard riset
+      responses:
+        "200":
+          description: Metadata dashboard
+        "400", "500":
+          description: Error
+
+  /api/v1/dashboard/daily:
+    get:
+      tags: [Dashboard]
+      summary: Data riset dashboard harian
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: scenario
+          in: query
+          schema:
+            type: string
+        - name: time
+          in: query
+          schema:
+            type: string
+        - name: om_rate_pct
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Data dashboard harian
+        "400", "500":
+          description: Error
+
+  /api/v1/dashboard/dispatch:
+    get:
+      tags: [Dashboard]
+      summary: Data dispatch harian
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: scenario
+          in: query
+          schema:
+            type: string
+        - name: compare
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Data dispatch
+        "400", "500":
+          description: Error
+
+  /api/v1/dashboard/monthly:
+    get:
+      tags: [Dashboard]
+      summary: Data agregasi bulanan
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+        - name: om_rate_pct
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Data bulanan
+        "400", "500":
+          description: Error
+
+  /api/v1/dashboard/risk:
+    get:
+      tags: [Dashboard]
+      summary: Analisis risiko
+      responses:
+        "200":
+          description: Data risiko
+        "500":
+          description: Error
+
+  /api/v1/control:
+    post:
+      tags: [Control]
+      summary: Kirim perintah kontrol ke aktuator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  description: Nama aksi kontrol yang ingin dieksekusi
+      responses:
+        "501":
+          description: Belum diimplementasi (kontrak API)
+        "400":
+          description: Field action wajib diisi
+
+  /api/v1/history:
+    get:
+      tags: [History]
+      summary: History sensor dalam rentang tanggal dengan ringkasan
+      parameters:
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Tanggal mulai (YYYY-MM-DD)
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Tanggal akhir (YYYY-MM-DD)
+      responses:
+        "200":
+          description: Ringkasan, chart data, dan tabel history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                  charts:
+                    type: object
+                  rows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HistoryRow'
+        "400":
+          description: Parameter start/end wajib diisi
+        "500":
+          description: Error pengambilan data
+
+  /api/v1/history/export:
+    get:
+      tags: [History]
+      summary: Export history ke CSV
+      parameters:
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "400", "500":
+          description: Error
+
+  /api/v1/system/services:
+    get:
+      tags: [System]
+      summary: Status container Docker layanan terkait
+      responses:
+        "200":
+          description: Daftar status service
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceStatus'
+        "500":
+          description: Error mengambil status Docker
+
+  /api/v1/system/validity:
+    get:
+      tags: [System]
+      summary: Validasi freshness data sensor, estimasi, dan alert monitoring
+      responses:
+        "200":
+          description: Status validitas sistem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemValidity'
+        "500":
+          description: Error validasi sistem
+
+components:
+  schemas:
+    RealtimeData:
+      type: object
+      properties:
+        pv:
+          type: number
+          description: Daya PV DC total (W)
+        pac_inverter:
+          type: number
+          description: Daya AC keluar inverter (W)
+        pac_estimasi:
+          type: number
+          nullable: true
+          description: Estimasi daya AC PV (W)
+        load:
+          type: number
+          description: Daya beban (W)
+        load_estimasi:
+          type: number
+          nullable: true
+          description: Estimasi daya beban (W)
+        soc:
+          type: number
+          description: State of charge BESS (%)
+        grid_va:
+          type: number
+          description: Daya apparent grid (VA)
+        p_inverter:
+          type: number
+          description: Daya inverter hybrid (W)
+        bess_power_dc:
+          type: number
+          description: Daya DC BESS (W)
+        freq_grid:
+          type: number
+          description: Frekuensi grid (Hz)
+        freq_bess:
+          type: number
+          description: Frekuensi BESS (Hz)
+        freq_pv:
+          type: number
+          description: Frekuensi PV (Hz)
+        pv_string_a:
+          type: number
+          description: Daya string PV A (W)
+        pv_string_b:
+          type: number
+          description: Daya string PV B (W)
+        grid_voltage:
+          type: number
+          description: Tegangan grid (V)
+        grid_current:
+          type: number
+          description: Arus grid (A)
+        dc_voltage:
+          type: number
+          description: Tegangan DC BESS (V)
+        dc_current:
+          type: number
+          description: Arus DC BESS (A)
+        dc_temperature:
+          type: number
+          description: Suhu DC BESS (C)
+        rf_instan:
+          type: number
+          description: Renewable fraction instan (%)
+        rf_pct:
+          type: number
+          description: Renewable fraction harian (%)
+        lcoe:
+          type: number
+          description: LCOE dinamis (Rp/kWh)
+        biaya_pln_murni:
+          type: number
+          description: Biaya PLN tanpa efisiensi (Rp)
+        biaya_aktual:
+          type: number
+          description: Biaya aktual setelah efisiensi (Rp)
+        essa_jam:
+          type: number
+          description: Estimasi ESS autonomy (jam)
+        co2_kg:
+          type: number
+          description: Emisi CO2 yang dihindari (kg)
+        dss_status:
+          type: string
+          description: Status operasi DSS
+        dss_pesan:
+          type: string
+          description: Keputusan aktif DSS
+        data_status:
+          type: string
+          enum: [OK, NO_DATA, ERROR]
+          description: Status kelayakan data
+
+    SensorHistoryRow:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        pv_string_a:
+          type: number
+        pv_string_b:
+          type: number
+        pv_dc:
+          type: number
+        pac_inverter:
+          type: number
+        load_watt:
+          type: number
+        dc_meassoc:
+          type: number
+        p_inverter:
+          type: number
+        grid_power_va:
+          type: number
+
+    ControlHistoryRow:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status_operasi:
+          type: string
+        keputusan_aktif:
+          type: string
+        daya_pln_dihitung_watt:
+          type: number
+
+    HistoryRow:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        pv_dc:
+          type: number
+        pac_inverter:
+          type: number
+        grid_va:
+          type: number
+        p_inverter:
+          type: number
+        soc:
+          type: number
+        load_w:
+          type: number
+        interval_hours:
+          type: number
+        dss_status:
+          type: string
+
+    ServiceStatus:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        started_at:
+          type: string
+
+    SystemValidity:
+      type: object
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValiditySource'
+        status_global:
+          type: string
+        alerts:
+          type: array
+          items:
+            type: object
+        last_check:
+          type: string
+          format: date-time
+
+    ValiditySource:
+      type: object
+      properties:
+        name:
+          type: string
+        timestamp:
+          type: string
+        staleness_s:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [FRESH, WARNING, STALE, NO_DATA, FUTURE]

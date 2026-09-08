@@ -1,0 +1,68 @@
+{
+  "source": {
+    "document": "251231 Laporan Keluaran 1 SINERGI TA 2025 EE.pdf",
+    "tables": ["5.6-2", "5.6-3"],
+    "period": "2025-01",
+    "note": "Angka laporan; bukan telemetri atau hasil pengukuran plant."
+  },
+  "monthly": {
+    "baseline": {
+      "fuel_l": 4773.621066,
+      "generator_hours": 593.75,
+      "pv_absorbed_kwh": 9617.771922,
+      "curtailment_kwh": 3235.770868,
+      "ens_kwh": 4.107196724,
+      "fuel_intensity_l_per_kwh": 0.115725628,
+      "fuel_cost_idr": 69217505.46,
+      "ens_penalty_idr": 20535983.62,
+      "soc_penalty_idr": 0,
+      "start_penalty_idr": 4400000,
+      "source_total_cost_idr": 94153489.08,
+      "starts": 44,
+      "stops": 44
+    },
+    "hemat": {
+      "fuel_l": 4815.411191,
+      "generator_hours": 593.75,
+      "pv_absorbed_kwh": 9617.771922,
+      "curtailment_kwh": 3235.770868,
+      "ens_kwh": 0,
+      "fuel_intensity_l_per_kwh": 0.116738735,
+      "fuel_cost_idr": 69823462.28,
+      "ens_penalty_idr": 0,
+      "soc_penalty_idr": 0,
+      "start_penalty_idr": 4400000,
+      "source_total_cost_idr": 74223462.28,
+      "starts": 44,
+      "stops": 44
+    },
+    "hemat_plus": {
+      "fuel_l": 4148.098816,
+      "generator_hours": 510.75,
+      "pv_absorbed_kwh": 12746.519,
+      "curtailment_kwh": 107.023787,
+      "ens_kwh": 0,
+      "fuel_intensity_l_per_kwh": 0.100561258,
+      "fuel_cost_idr": 60147432.83,
+      "ens_penalty_idr": 0,
+      "soc_penalty_idr": 0,
+      "start_penalty_idr": 3450000,
+      "source_total_cost_idr": 63597432.83,
+      "starts": 35,
+      "stops": 34
+    }
+  },
+  "risk": {
+    "source_document": "251231 Laporan Keluaran 1 SINERGI TA 2025 EE.pdf",
+    "section": "Analisis risiko biaya",
+    "scenario_count": 1000,
+    "alpha": 0.95,
+    "pv_sigma": 0.2,
+    "fuel_price_idr_per_l": 14500,
+    "start_penalty_idr": 100000,
+    "mean_cost_idr": 544142,
+    "var95_cost_idr": 832461,
+    "cvar95_cost_idr": 877466,
+    "reserve_idr": 288319
+  }
+}
