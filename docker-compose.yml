@@ -13,6 +13,7 @@ services:
       - grafana
       - dashboard
       - auth
+      - export
     networks: [ smartgrid-network ]
     restart: unless-stopped
   nginx-exporter:
@@ -195,6 +196,21 @@ services:
     depends_on:
       - postgres-auth
       - nats
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
+  #===============Service Export=====================
+  export:
+    build:
+      context: ./services/export
+      dockerfile: Dockerfile
+    container_name: smartgrid-export
+    environment:
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET}
+      TIMESCALE_DSN: ${TIMESCALE_DSN:-postgres://module_user:module_pass@timescaledb-module:5432/module_ts?sslmode=disable}
+    depends_on:
+      - auth
+      - timescaledb-module
     networks: [ smartgrid-network ]
     restart: unless-stopped
   postgres-auth-exporter:

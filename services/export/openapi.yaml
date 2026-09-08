@@ -1,0 +1,404 @@
+openapi: 3.0.3
+info:
+  title: SmartGrid Export API
+  version: 1.0.0
+  description: >-
+    REST API untuk ekspor data historis telemetri sensor IoT SmartGrid ke format
+    CSV atau JSON dengan pagination berbasis cursor (keyset) dan kontrol akses berbasis peran (RBAC).
+servers:
+  - url: http://localhost:3001
+    description: Melalui Nginx Reverse Proxy
+  - url: http://localhost:8080
+    description: Direct container port (internal)
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check liveness probe
+      security: []
+      responses:
+        "200":
+          description: Service sehat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+
+  /export/health:
+    get:
+      tags: [System]
+      summary: Health check liveness probe (alias dengan prefix /export)
+      security: []
+      responses:
+        "200":
+          description: Service sehat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+
+  /export/v1/nodes:
+    get:
+      tags: [Discovery]
+      summary: List node yang memiliki riwayat telemetri beserta metriknya
+      description: Mengambil daftar node ID, module ID yang terpasang, dan nama-nama metrik yang tersimpan di TimescaleDB.
+      responses:
+        "200":
+          description: Berhasil mengambil daftar node
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      nodes:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeMetric'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /export/v1/meta:
+    get:
+      tags: [Telemetry]
+      summary: Preview metadata dan estimasi jumlah data ekspor
+      description: Menghitung jumlah total data dalam rentang waktu yang diminta tanpa men-download file.
+      parameters:
+        - name: node_id
+          in: query
+          required: true
+          description: ID node (bisa dipisah koma untuk multiple node, atau '*' untuk semua)
+          schema:
+            type: string
+            example: "node-00"
+        - name: metric
+          in: query
+          required: false
+          description: Nama metrik (bisa dipisah koma, atau '*' untuk semua metrik)
+          schema:
+            type: string
+            example: "temperatur dalam,humidity dalam"
+        - name: from
+          in: query
+          required: false
+          description: Waktu mulai (RFC3339, YYYY-MM-DD, atau timestamp unix detik). Default 24 jam lalu.
+          schema:
+            type: string
+            example: "2026-09-08T00:00:00Z"
+        - name: to
+          in: query
+          required: false
+          description: Waktu akhir (RFC3339, YYYY-MM-DD, atau timestamp unix detik). Default waktu saat ini.
+          schema:
+            type: string
+            example: "2026-09-09T00:00:00Z"
+      responses:
+        "200":
+          description: Metadata berhasil dihitung
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      node_ids:
+                        type: array
+                        items:
+                          type: string
+                        example: ["node-00"]
+                      metrics:
+                        type: array
+                        items:
+                          type: string
+                        example: ["*"]
+                      from:
+                        type: string
+                        format: date-time
+                        example: "2026-09-08T00:00:00Z"
+                      to:
+                        type: string
+                        format: date-time
+                        example: "2026-09-09T00:00:00Z"
+                      total:
+                        type: integer
+                        example: 1250
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /export/v1/telemetry:
+    get:
+      tags: [Telemetry]
+      summary: Ekspor data telemetri historis (CSV atau JSON)
+      description: >-
+        Menyajikan data telemetri yang difilter berdasarkan node, metrik, dan rentang waktu.
+        Format default adalah CSV attachment (file download). Jika parameter format=json diberikan,
+        respons dikembalikan dalam amplop JSON terstruktur.
+      parameters:
+        - name: node_id
+          in: query
+          required: true
+          description: "ID node (bisa dipisah koma, contoh: node-00,node-01 atau *)"
+          schema:
+            type: string
+            example: "node-00"
+        - name: metric
+          in: query
+          required: false
+          description: Nama metrik (contoh 'temperatur dalam', atau '*' untuk semua)
+          schema:
+            type: string
+            example: "temperatur dalam"
+        - name: from
+          in: query
+          required: false
+          description: Waktu mulai pencarian (RFC3339, YYYY-MM-DD, atau unix detik)
+          schema:
+            type: string
+            example: "2026-09-08T00:00:00Z"
+        - name: to
+          in: query
+          required: false
+          description: Waktu akhir pencarian (RFC3339, YYYY-MM-DD, atau unix detik)
+          schema:
+            type: string
+            example: "2026-09-09T00:00:00Z"
+        - name: limit
+          in: query
+          required: false
+          description: Batas jumlah baris data per halaman (default 10000, maksimum 100000)
+          schema:
+            type: integer
+            default: 10000
+            example: 100
+        - name: cursor
+          in: query
+          required: false
+          description: Keyset token opaque untuk mengambil halaman berikutnya (pagination)
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: false
+          description: Format output yang diinginkan ('csv' atau 'json'). Default 'csv'.
+          schema:
+            type: string
+            enum: [csv, json]
+            default: csv
+      responses:
+        "200":
+          description: Data telemetri berhasil diekspor
+          headers:
+            X-Export-Next-Cursor:
+              description: Cursor token opaque untuk mengambil halaman berikutnya pada ekspor CSV
+              schema:
+                type: string
+            Content-Disposition:
+              description: Header download file untuk format CSV
+              schema:
+                type: string
+                example: "attachment; filename=telemetry_node-00_temperatur_dalam_20260908_20260909.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+                example: |
+                  time,node_id,module_id,temperatur dalam
+                  2026-09-08T23:02:00Z,node-00,d73f79bc-0757-4c42-8534-709ff9762a32,35
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      rows:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TelemetryRow'
+                      total:
+                        type: integer
+                        description: Jumlah baris pada respons halaman saat ini
+                        example: 2
+                      has_more:
+                        type: boolean
+                        example: true
+                      next_cursor:
+                        type: string
+                        description: Cursor token untuk query halaman berikutnya
+                        example: "eyJ0IjoiMjAyNi0wOS0wOFQyMzowMjowMS4wMjI1NDhaIiwibiI6Im5vZGUtMDAiLCJtIjoidGVtcGVyYXR1ciBkYWxhbSJ9"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /export/v1/openapi:
+    get:
+      tags: [System]
+      summary: Spesifikasi OpenAPI untuk Export Service
+      security: []
+      responses:
+        "200":
+          description: Spesifikasi OpenAPI dalam format JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Masukkan access token JWT dari Auth Service (/auth/login). Memerlukan peran admin atau operator.
+
+  schemas:
+    NodeMetric:
+      type: object
+      properties:
+        node_id:
+          type: string
+          example: "node-00"
+        module_id:
+          type: string
+          example: "d73f79bc-0757-4c42-8534-709ff9762a32"
+        metrics:
+          type: array
+          items:
+            type: string
+          example: ["humidity dalam", "temperatur dalam"]
+
+    TelemetryRow:
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+          example: "2026-09-08T23:02:00.673254Z"
+        node_id:
+          type: string
+          example: "node-00"
+        module_id:
+          type: string
+          nullable: true
+          example: "d73f79bc-0757-4c42-8534-709ff9762a32"
+        metric:
+          type: string
+          example: "temperatur dalam"
+        value:
+          type: number
+          format: double
+          example: 35.0
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "BAD_REQUEST"
+            message:
+              type: string
+              example: "node_id is required"
+
+  responses:
+    BadRequest:
+      description: Parameter query tidak valid atau rentang waktu melebihi 366 hari
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: "BAD_REQUEST"
+              message: "invalid node_id or metric (allowed: a-z A-Z 0-9 _ . - : space)"
+    Unauthorized:
+      description: Authorization header kosong atau JWT token tidak valid/kadaluarsa
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: "UNAUTHORIZED"
+              message: "missing or invalid Authorization header"
+    Forbidden:
+      description: Peran pengguna tidak memiliki hak akses (hanya admin dan operator yang diizinkan)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: "FORBIDDEN"
+              message: "insufficient role (requires admin or operator)"
+    InternalError:
+      description: Terjadi kesalahan internal server saat memproses data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: "INTERNAL_ERROR"
+              message: "export failed"
