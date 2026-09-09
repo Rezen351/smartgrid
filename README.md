@@ -4,14 +4,13 @@
 
 [![Docker](https://img.shields.io/badge/Docker-Containers-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![Docker Compose](https://img.shields.io/badge/Docker_Compose-Orchestration-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![InfluxDB](https://img.shields.io/badge/InfluxDB-Time_Series-22BCF2?logo=influxdb&logoColor=white)](https://www.influxdata.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Relational-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Grafana](https://img.shields.io/badge/Grafana-Visualization-F46800?logo=grafana&logoColor=white)](https://grafana.com/)
 [![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C?logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-660066?logo=eclipse&logoColor=white)](https://mosquitto.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Infrastruktur Docker Compose untuk layanan Smart Grid IoT, time-series database, dan monitoring stack.**
+**Infrastruktur Docker Compose untuk platform IoT Smart Grid, messaging, time-series database, dan monitoring stack.**
 
 </div>
 
@@ -50,17 +49,44 @@ cp .env.example .env
 Atau buat file `.env` jika belum ada dengan konten seperti:
 
 ```env
-INFLUXDB_ADMIN_USER=admin
-INFLUXDB_ADMIN_PASSWORD=<influxdb_password>
-INFLUXDB_ORG=smartgrid
-INFLUXDB_BUCKET=smartgrid_data
+# Cloudflare Tunnel
+CLOUDFLARE_TUNNEL_TOKEN=your_tunnel_token_here
+CLOUDFLARE_DOMAIN=your-domain.com
 
+# Grafana
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<grafana_password>
+
+# Dashboard PostgreSQL
 POSTGRES_USER=smartgrid
 POSTGRES_PASSWORD=<postgres_password>
 POSTGRES_DB=smartgrid
 
-GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=<grafana_password>
+# Auth PostgreSQL
+AUTH_DB_USER=auth_user
+AUTH_DB_PASSWORD=<auth_db_password>
+AUTH_DB_NAME=auth_db
+JWT_SECRET=<jwt_secret>
+AUTH_ADMIN_USERNAME=admin
+AUTH_ADMIN_EMAIL=admin@smartgrid.local
+AUTH_ADMIN_PASSWORD=<admin_password>
+
+# Module Service
+MODULE_DB_USER=module_user
+MODULE_DB_PASSWORD=<module_db_password>
+MODULE_DB_NAME=module_db
+TIMESCALE_DB_USER=module_user
+TIMESCALE_DB_PASSWORD=<timescale_password>
+TIMESCALE_DB_NAME=module_ts
+
+# Redis Shared Cache
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# Mosquitto MQTT
+MQTT_USER=
+MQTT_PASS=
+MQTT_TOPIC_PREFIX=smartfarm
 ```
 
 Jalankan layanan:
@@ -88,24 +114,58 @@ Stack SmartGrid terdiri dari:
 | Service | Port | Fungsi | Status |
 |---|---|---|---|
 | **nginx** | `3001` | Reverse proxy | Aktif |
-| **mosquitto** | `1883` | MQTT broker untuk IoT | Aktif |
-| **influxdb3** | `8181` | Time-series database untuk sensor data | Aktif |
-| **postgres** | `5432` | Relational database untuk metadata | Aktif |
-| **grafana** | `3000` (internal) | Visualization dashboard | Aktif, via nginx /grafana/ |
+| **cloudflared** | - | Cloudflare tunnel | Aktif |
+| **grafana** | `3000` | Visualization dashboard | Aktif |
 | **prometheus** | `9090` | Metrics scraping & alerting | Aktif |
 | **cadvisor** | `8080` | Container metrics exporter | Aktif |
-| **postgres-exporter** | `9187` | PostgreSQL metrics exporter | Aktif |
+| **dashboard** | `5000` (internal) | Flask web app (HMI/API) | Aktif, via nginx /dashboard/ |
+| **auth** | `8080` (internal) | Auth service (JWT, RBAC) | Aktif, via nginx /auth/ |
+| **module** | `8080` (internal) | Module service (IoT logic) | Aktif, via nginx /modules/ |
+| **nats** | `4222`, `8222` | Messaging (JetStream) | Aktif |
+| **mosquitto** | `1883`, `9001` | MQTT broker untuk IoT | Aktif |
+| **redis-shared** | `6379` | Shared cache | Aktif |
+| **postgres-dashboard** | `5432` (internal) | Metadata untuk dashboard | Aktif |
+| **postgres-auth** | `5432` (internal) | Metadata untuk auth | Aktif |
+| **mariadb-module** | `3306` (internal) | Relational data untuk module | Aktif |
+| **timescaledb-module** | `5432` (internal) | Time-series data untuk module | Aktif |
+| **nginx-exporter** | `9113` (internal) | Nginx metrics | Aktif |
+| **redis-exporter** | `9121` (internal) | Redis metrics | Aktif |
+| **mosquitto-exporter** | `9123` (internal) | Mosquitto metrics | Aktif |
+| **postgres-dashboard-exporter** | `9187` (internal) | PostgreSQL dashboard metrics | Aktif |
+| **postgres-auth-exporter** | `9187` (internal) | PostgreSQL auth metrics | Aktif |
+| **mariadb-module-exporter** | `9104` (internal) | MariaDB module metrics | Aktif |
+| **timescaledb-exporter** | `9187` (internal) | TimescaleDB module metrics | Aktif |
 
-> **Catatan:** 
-> - InfluxDB digunakan dalam mode v3 Core. Port yang dipublish adalah `8181` (HTTP).
-> - Grafana tidak dipublish ke host, diakses melalui reverse proxy nginx di `http://localhost:3001/grafana/`.
+> **Catatan:**
+> - Akses dashboard, auth, dan module melalui reverse proxy nginx di `http://localhost:3001/`.
+> - Cloudflare tunnel menyediakan akses eksternal yang aman.
 
 ### Data Flow Monitoring
 
 ```text
 cadvisor:8080 ─┐
-               ├──► prometheus:9090 ──► grafana:3000 (internal, via nginx /grafana/)
-postgres-exporter:9187 ─┘
+               ├──► prometheus:9090 ──► grafana:3000 (via nginx /grafana/)
+postgres-dashboard-exporter:9187 ─┘
+postgres-auth-exporter:9187 ───┘
+mariadb-module-exporter:9104 ──┘
+timescaledb-exporter:9187 ─────┘
+nginx-exporter:9113 ───────────┘
+redis-exporter:9121 ────────────┘
+mosquitto-exporter:9123 ────────┘
+```
+
+### Data Flow Application
+
+```text
+dashboard:5000 ◄── nginx:3001 ──► auth:8080
+                         │
+                         ├──► module:8080 ◄── nats:4222
+                         │         │
+                         │         ├──► mosquitto:1883 (MQTT)
+                         │         ├──► mariadb-module:3306
+                         │         └──► timescaledb-module:5432
+                         │
+                         └──► grafana:3000
 ```
 
 ## Struktur Project
@@ -125,21 +185,32 @@ smartgrid/
 │   │       ├── acl.acl
 │   │       └── passwd
 │   ├── postgres/
-│   │   └── init/
+│   ├── mariadb/
+│   │   └── module/
+│   │       └── init.sql
 │   ├── grafana/
 │   │   ├── provisioning/
 │   │   └── dashboards/
-│   └── prometheus/
-│       └── prometheus.yml
+│   ├── prometheus/
+│   │   └── prometheus.yml
+│   └── cloudflared/
+│       └── config.yml
 ├── services/
+│   ├── auth/          # Go service: authentication & RBAC
+│   ├── module/        # Go service: IoT module logic
+│   ├── export/        # Go service: data export
+│   └── dashboard/     # Flask app: HMI & API
+├── tests/
 ├── volumes/
 │   ├── mosquitto/
-│   │   ├── data/
-│   │   └── log/
-│   ├── influxdb/
+│   ├── redis/
 │   ├── postgres/
+│   ├── postgres-auth/
 │   ├── grafana/
-│   └── prometheus/
+│   ├── prometheus/
+│   ├── nats/
+│   ├── mariadb-module/
+│   └── timescaledb-module/
 └── docs/
 ```
 
@@ -148,19 +219,47 @@ smartgrid/
 Stack monitoring menggunakan **Prometheus** + **Grafana**:
 
 ### Prometheus
-- Scrape metrics dari cadvisor, postgres-exporter, influxdb, grafana
+- Scrape metrics dari cadvisor, postgres-exporter, grafana, nginx, redis, mosquitto, dashboard, auth, module, nats
 - Konfigurasi scrape di `infra/prometheus/prometheus.yml`
 - UI: `http://localhost:9090`
+
+### Grafana
+- Dashboard visualization
+- Data source: Prometheus
+- Akses via nginx: `http://localhost:3001/grafana/`
+- Dashboard System Monitoring: `http://localhost:3001/grafana/d/system-monitoring/system-monitoring`
 
 ### cAdvisor
 - Ekspos metrics container Docker (CPU, memory, network, disk)
 - UI: `http://localhost:8080`
 
-### Grafana
-- Dashboard visualization
-- Bisa diintegrasikan dengan Prometheus sebagai data source
-- Akses via nginx: `http://localhost:3001/grafana/`
-- Dashboard System Monitoring: `http://localhost:3001/grafana/d/system-monitoring/system-monitoring`
+## Layanan Aplikasi
+
+### Dashboard (Flask)
+- Web app untuk HMI dan REST API
+- Akses via nginx: `http://localhost:3001/dashboard/`
+- API endpoint: `http://localhost:3001/api/v1/`
+- Health check: `http://localhost:3001/health/ready`
+
+### Auth (Go)
+- Service untuk autentikasi dan otorisasi (JWT, RBAC)
+- Akses via nginx: `http://localhost:3001/auth/`
+
+### Module (Go)
+- Service untuk logika IoT module
+- Berkomunikasi dengan NATS, Mosquitto, MariaDB, dan TimescaleDB
+- Akses via nginx: `http://localhost:3001/modules/` atau `http://localhost:3001/api/module/`
+
+## Messaging
+
+### NATS
+- Messaging system dengan JetStream untuk komunikasi antar service
+- Port: `4222` (client), `8222` (HTTP monitoring)
+
+### Mosquitto MQTT
+- MQTT broker untuk komunikasi dengan perangkat IoT
+- Port: `1883` (TCP), `9001` (WebSocket)
+- Akses WebSocket via nginx: `http://localhost:3001/` (route `/ws` jika dikonfigurasi)
 
 ## Standar Kolaborasi Developer
 
@@ -214,25 +313,15 @@ Sebelum merge, pastikan:
 
 ## CI/CD
 
-Project ini mengikuti pola CI/CD dasar dengan tahapan berikut:
+Project ini menggunakan GitHub Actions dengan tahapan berikut:
 
-### Pipeline yang Direkomendasikan
+### Pipeline
 
-1. Trigger otomatis pada push atau pull request.
-2. Checkout repository.
-3. Setup environment.
-4. Validasi lint dan format.
-5. Build aplikasi atau image Docker.
-6. Run unit / integration test bila tersedia.
-7. Validasi konfigurasi Docker Compose.
-8. Publish artifact / image jika build sukses.
-9. Deploy ke environment target berdasarkan branch.
-
-### Rekomendasi Pipeline
-
-- `main` -> deploy production
-- `develop` -> deploy staging/testing
-- `feature/*` -> build validation only
+1. Trigger otomatis pada push atau pull request ke branch `main` dan `develop`.
+2. Validasi Docker Compose configuration.
+3. Build Docker services.
+4. Run Go tests untuk service `auth`, `module`, dan `export`.
+5. Run Python syntax check untuk service `dashboard`.
 
 ### Contoh Command Validasi
 
@@ -240,13 +329,18 @@ Project ini mengikuti pola CI/CD dasar dengan tahapan berikut:
 docker compose config
 ```
 
-Untuk project yang memiliki aplikasi backend/frontend, tambahkan validasi seperti:
+Untuk service aplikasi:
 
 ```bash
-npm install
-npm run lint
-npm run test
-npm run build
+# Go services
+cd services/auth && go test -v ./...
+cd services/module && go test -v ./...
+cd services/export && go test -v ./...
+
+# Python service
+cd services/dashboard
+pip install -r requirements.txt
+python -m py_compile app.py history.py research.py
 ```
 
 ## Keamanan dan Environment
@@ -257,6 +351,7 @@ Beberapa aturan penting:
 - Pastikan `.env` masuk ke `.gitignore`.
 - Gunakan variabel environment pada pipeline CI/CD dan deployment.
 - Hindari hardcode URL atau credential di source code.
+- Gunakan Cloudflare Tunnel untuk akses eksternal yang aman.
 
 ## Deployment Notes
 
@@ -264,7 +359,8 @@ Untuk deployment:
 - pastikan Docker Compose berjalan di environment target,
 - validasi port yang digunakan tidak bentrok,
 - pastikan volume data dan konfigurasi bersifat persistent,
-- cocokkan token atau secret pada environment deployment.
+- cocokkan token atau secret pada environment deployment,
+- konfigurasi Cloudflare Tunnel sudah benar di `infra/cloudflared/config.yml`.
 
 ## Rekomendasi Tim
 
@@ -278,6 +374,8 @@ Untuk menjaga kualitas proyek:
 ## Quick Start
 
 ```bash
+cp .env.example .env
+# Edit .env sesuai environment Anda
 docker compose up -d
 docker compose ps
 ```

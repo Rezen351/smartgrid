@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1e9">
+  <title>Dashboard PLTS · Lab CITA</title>
+  <link rel="icon" type="image/svg+xml" sizes="any" href="/static/img/favicon.svg?v=20260810-5">
+  <link rel="stylesheet" href="/static/css/research.css?v=20260908-1">
+  <link rel="stylesheet" href="/static/css/modules.css?v=20260908-1">
+  <script src="/static/vendor/chart.umd.js?v=4.4.7" defer></script>
+  <script src="/static/js/research.js?v=20260908-1" defer></script>
+  <script src="/static/js/modules.js?v=20260908-1" defer></script>
+</head>
+
+<body data-page="{{ active_page|default('daily') }}">
+  <a class="skip-link" href="#research-content">Lewati ke konten utama</a>
+
+  <header class="topbar">
+    <div class="masthead">
+      <a class="brand" href="/" aria-label="Halaman ringkasan PLTS">
+        <img class="brand-logo-cita" src="/static/img/logo_cita_wordmark.png" width="140" height="39" alt="CITA ITB"
+          fetchpriority="high">
+      </a>
+      <nav class="desktop-nav" aria-label="Navigasi utama">
+        <a data-nav="daily" href="/dashboard/daily">Ringkasan</a>
+        <a data-nav="dispatch" href="/dashboard/dispatch">Dispatch</a>
+        <a data-nav="monthly" href="/dashboard/monthly">Bulanan</a>
+        <a data-nav="risk" href="/dashboard/risk">Risiko</a>
+      </nav>
+      <div class="user-menu" id="user-menu">
+        <button type="button" class="user-menu-btn" id="user-menu-btn" aria-expanded="false" aria-haspopup="true"
+          aria-label="Menu akun">
+          <span class="user-avatar" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </span>
+          <span class="user-name" id="user-name">Admin</span>
+          <svg class="user-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="user-dropdown" id="user-dropdown" role="menu" hidden>
+          <a href="/dashboard/modules" class="dropdown-item" role="menuitem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+            <span>Manajemen Modul</span>
+          </a>
+          <div class="dropdown-divider"></div>
+          <form class="logout-form" action="/logout" method="post">
+            <button type="submit" class="logout-btn" role="menuitem">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              <span>Logout</span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="research-content" class="workspace" tabindex="-1">
+    <div id="page-status" class="page-status is-loading" role="status" aria-live="polite">
+      <span id="page-status-text">Menyiapkan data penelitian…</span>
+      <button id="retry-button" type="button" hidden>Coba Lagi</button>
+    </div>
+
+    <section class="context-toolbar" aria-label="Konteks penelitian">
+      <div class="context-dataset">
+        <span class="context-icon" aria-hidden="true"><svg>
+            <use href="/static/img/dashboard-icons.svg?v=20260810-1#calendar" />
+          </svg></span>
+        <span><small>Dataset Aktif</small><strong>Januari 2025</strong><em>Agregat laporan penelitian</em></span>
+      </div>
+      <div class="freshness" aria-label="Status pembaruan data">
+        <span class="provenance-badge">Rekonstruksi</span>
+        <span><small>Status</small><strong id="last-updated">Memuat data…</strong></span>
+      </div>
+      <button class="filter-toggle" id="filter-toggle" type="button" aria-expanded="false"
+        aria-controls="context-filter-panel">
+        <span><small>Filter Aktif</small><strong id="filter-summary">Hemat Plus · Mengikuti
+            tanggal</strong></span><b>Ubah Filter</b>
+      </button>
+      <div class="context-filter-panel" id="context-filter-panel">
+        <label class="context-control" id="scenario-filter" for="global-scenario">
+          <span>Skenario EMS</span>
+          <select id="global-scenario" name="scenario" autocomplete="off">
+            <option value="baseline">Baseline</option>
+            <option value="hemat">Hemat</option>
+            <option value="hemat_plus" selected>Hemat Plus</option>
+          </select>
+          <small id="scenario-caption">Aturan operasi terpilih</small>
+        </label>
+        <label class="context-control" id="weather-filter" for="global-weather">
+          <span>Cuaca Representatif</span>
+          <select id="global-weather" name="weather" autocomplete="off">
+            <option value="auto">Mengikuti tanggal</option>
+            <option value="clear">Cerah · 25 Januari</option>
+            <option value="cloudy">Berawan · 11 Januari</option>
+          </select>
+          <small id="weather-caption">Klasifikasi dari energi PV</small>
+        </label>
+      </div>
+    </section>
+
+    <section class="page-view" data-view="daily" aria-labelledby="daily-title">
+      <div class="page-heading">
+        <div>
+          <span class="kicker">Ringkasan Harian</span>
+          <h1 id="daily-title">Kinerja Energi & Biaya</h1>
+          <p>Cuplikan operasi dan perbandingan skenario pada waktu yang dipilih.</p>
+        </div>
+        <div class="compact-controls">
+          <label for="daily-date">Tanggal<input id="daily-date" name="daily_date" type="date" min="2025-01-01"
+              max="2025-01-31" value="2025-01-25" autocomplete="off"></label>
+          <label for="daily-time">Waktu<select id="daily-time" name="daily_time" autocomplete="off">
+              <option value="12:00">12:00</option>
+            </select></label>
+        </div>
+      </div>
+
+      <section class="insight-hero data-panel" aria-labelledby="daily-insight-title">
+        <div class="insight-copy">
+          <div class="insight-meta"><span id="daily-weather">—</span><span id="daily-insight-scenario">Hemat Plus</span>
+          </div>
+          <span class="eyebrow">Temuan Utama</span>
+          <h2 id="daily-insight-title">Menyusun ringkasan operasi…</h2>
+          <p id="daily-insight-copy">Data skenario dan cuplikan terpilih sedang diproses.</p>
+          <div class="insight-delta">
+            <span>Biaya vs Baseline</span>
+            <strong id="daily-cost-delta">—</strong>
+            <small id="daily-cost-delta-copy">Menghitung perubahan biaya harian…</small>
+          </div>
+        </div>
+        <div class="system-overview" aria-label="Komponen model microgrid pada waktu terpilih">
+          <div class="system-overview-head"><span>Komponen Model · Cuplikan 15 Menit</span><small>Bukan pengukuran
+              alat</small></div>
+          <div class="system-grid">
+            <article class="system-node node-generator"><span class="node-icon" aria-hidden="true"><svg>
+                  <use href="/static/img/dashboard-icons.svg?v=20260810-1#generator" />
+                </svg></span><span>Genset</span><strong id="d-gen-status">—</strong><small id="d-gen-hours">— jam
+                kumulatif</small></article>
+            <article class="system-node node-solar"><span class="node-icon" aria-hidden="true"><svg>
+                  <use href="/static/img/dashboard-icons.svg?v=20260810-1#solar" />
+                </svg></span><span>PV Terserap</span><strong id="d-pv-power">— kW</strong><small id="d-pv-energy">— kWh
+                kumulatif</small></article>
+            <article class="system-node node-battery"><span class="node-icon" aria-hidden="true"><svg>
+                  <use href="/static/img/dashboard-icons.svg?v=20260810-1#battery" />
+                </svg></span><span>SOC BESS</span><strong id="d-soc">—%</strong><small id="d-battery-mode">—</small>
+            </article>
+            <article class="system-node node-load"><span class="node-icon" aria-hidden="true"><svg>
+                  <use href="/static/img/dashboard-icons.svg?v=20260810-1#load" />
+                </svg></span><span>Beban</span><strong id="d-load">— kW</strong><small id="d-load-energy">— kWh
+                kumulatif</small></article>
+          </div>
+        </div>
+      </section>
+
+      <div class="analysis-grid">
+        <section class="card chart-card data-panel" aria-labelledby="daily-chart-title">
+          <div class="card-head">
+            <div><span class="eyebrow">Perbandingan Skenario</span>
+              <h2 id="daily-chart-title">Indikator Harian</h2>
+            </div>
+            <label class="metric-select" for="daily-metric"><span>Indikator</span><select id="daily-metric"
+                name="daily_metric" autocomplete="off">
+                <option value="cost">Total biaya</option>
+                <option value="fuel">Konsumsi BBM</option>
+                <option value="hours">Jam genset</option>
+                <option value="pv">Energi PV</option>
+              </select></label>
+          </div>
+          <p class="chart-insight" id="daily-chart-summary">Memuat perbandingan skenario…</p>
+          <div class="chart-box primary"><canvas id="chart-daily-comparison" role="img"
+              aria-label="Perbandingan indikator harian tiga skenario" aria-describedby="daily-chart-summary"></canvas>
+          </div>
+        </section>
+
+        <section class="card kpi-card data-panel" aria-labelledby="daily-kpi-title">
+          <div class="card-head">
+            <div><span class="eyebrow">KPI Final Harian</span>
+              <h2 id="daily-kpi-title">Ringkasan Performa</h2>
+            </div>
+          </div>
+          <dl class="kpi-list">
+            <div>
+              <dt>BBM</dt>
+              <dd><strong id="kpi-fuel">—</strong><span>liter</span></dd><small class="kpi-delta"
+                id="delta-fuel">—</small>
+            </div>
+            <div>
+              <dt>PV terserap</dt>
+              <dd><strong id="kpi-pv">—</strong><span>kWh</span></dd><small class="kpi-delta" id="delta-pv">—</small>
+            </div>
+            <div>
+              <dt>Curtailment</dt>
+              <dd><strong id="kpi-curtail">—</strong><span>kWh</span></dd><small class="kpi-delta"
+                id="delta-curtail">—</small>
+            </div>
+            <div>
+              <dt>ENS</dt>
+              <dd><strong id="kpi-ens">—</strong><span>kWh</span></dd><small class="kpi-delta" id="delta-ens">—</small>
+            </div>
+            <div>
+              <dt>Biaya teralokasi</dt>
+              <dd><strong id="kpi-source-cost">—</strong><span>tanpa O&amp;M</span></dd><small class="kpi-delta"
+                id="delta-source-cost">—</small>
+            </div>
+            <div class="featured">
+              <dt>Total + O&amp;M</dt>
+              <dd><strong id="kpi-demo-cost">—</strong><span id="daily-om-label">sesuai konfigurasi</span></dd><small
+                class="kpi-delta" id="delta-total-cost">—</small>
+            </div>
+          </dl>
+        </section>
+      </div>
+
+      <details class="details-panel data-panel">
+        <summary><span><strong>Rincian Biaya</strong><small>Komponen biaya untuk skenario terpilih</small></span><span
+            id="cost-total-summary">—</span></summary>
+        <dl class="cost-breakdown">
+          <div>
+            <dt>BBM teralokasi</dt>
+            <dd id="cost-fuel">—</dd><span class="cost-bar"><i id="cost-fuel-bar"></i></span>
+          </div>
+          <div>
+            <dt>Penalti ENS</dt>
+            <dd id="cost-ens">—</dd><span class="cost-bar"><i id="cost-ens-bar"></i></span>
+          </div>
+          <div>
+            <dt>Penalti transisi</dt>
+            <dd id="cost-start">—</dd><span class="cost-bar"><i id="cost-start-bar"></i></span>
+          </div>
+          <div>
+            <dt>O&amp;M asumsi</dt>
+            <dd id="cost-om">—</dd><span class="cost-bar"><i id="cost-om-bar"></i></span>
+          </div>
+          <div class="total">
+            <dt>Total dengan O&amp;M</dt>
+            <dd id="cost-total">—</dd><small>Akumulasi seluruh komponen</small>
+          </div>
+        </dl>
+      </details>
+    </section>
+
+    <section class="page-view" data-view="dispatch" aria-labelledby="dispatch-title">
+      <div class="page-heading">
+        <div><span class="kicker">Profil 96 Interval</span>
+          <h1 id="dispatch-title">Profil Operasi 24 Jam</h1>
+          <p>Eksplorasi komponen daya dan SOC pada resolusi 15 menit.</p>
+        </div>
+        <div class="compact-controls dispatch-controls">
+          <label for="dispatch-date">Tanggal<input id="dispatch-date" name="dispatch_date" type="date" min="2025-01-01"
+              max="2025-01-31" value="2025-01-25" autocomplete="off"></label>
+          <label for="dispatch-compare">Pembanding<select id="dispatch-compare" name="dispatch_compare"
+              autocomplete="off">
+              <option value="">Tanpa pembanding</option>
+              <option value="baseline">Baseline</option>
+              <option value="hemat">Hemat</option>
+              <option value="hemat_plus">Hemat Plus</option>
+            </select></label>
+        </div>
+      </div>
+
+      <div class="quick-row" aria-label="Tanggal cuaca representatif"><span>Profil representatif</span><button
+          type="button" data-weather-date="2025-01-25"><svg aria-hidden="true">
+            <use href="/static/img/dashboard-icons.svg?v=20260810-1#sun" />
+          </svg>Cerah · 25 Jan</button><button type="button" data-weather-date="2025-01-11"><svg aria-hidden="true">
+            <use href="/static/img/dashboard-icons.svg?v=20260810-1#cloud" />
+          </svg>Berawan · 11 Jan</button></div>
+
+      <section class="dispatch-signature data-panel" aria-label="Fase utama profil operasi">
+        <div class="dispatch-phase night"><span>00–06</span><strong>Malam</strong><small>Beban sebelum surya</small>
+        </div>
+        <div class="dispatch-phase solar"><span>06–18</span><strong>Jendela Surya</strong><small
+            id="dispatch-peak-pv-time">Puncak PV —</small></div>
+        <div class="dispatch-phase evening"><span>18–24</span><strong>Malam</strong><small
+            id="dispatch-peak-load-time">Puncak beban —</small></div>
+        <div class="dispatch-callout"><span>Peran BESS</span><strong
+            id="dispatch-bess-callout">Menganalisis…</strong><small>positif discharge · negatif charging</small></div>
+      </section>
+
+      <div class="metric-grid metric-grid-four data-panel" aria-label="Ringkasan profil">
+        <article class="metric-card"><span>Beban Harian</span><strong id="dispatch-load-total">—</strong><small>energi
+            profil</small></article>
+        <article class="metric-card"><span>Energi Genset</span><strong id="dispatch-gen-total">—</strong><small>energi
+            profil</small></article>
+        <article class="metric-card"><span>PV Terserap</span><strong id="dispatch-pv-total">—</strong><small>energi
+            profil</small></article>
+        <article class="metric-card"><span>Rentang SOC</span><strong id="dispatch-soc-range">—</strong><small>batas
+            skenario</small></article>
+      </div>
+
+      <section class="card chart-card data-panel" aria-labelledby="dispatch-power-title">
+        <div class="card-head">
+          <div><span class="eyebrow">Komponen Daya</span>
+            <h2 id="dispatch-power-title">Beban, Genset, PV & BESS</h2>
+          </div><span class="weather-pill" id="dispatch-weather">—</span>
+        </div>
+        <p class="chart-insight" id="dispatch-power-summary">Memuat profil komponen daya…</p>
+        <div class="chart-box dispatch-power"><canvas id="chart-dispatch-power" role="img"
+            aria-label="Profil komponen daya selama 24 jam" aria-describedby="dispatch-power-summary"></canvas></div>
+      </section>
+
+      <section class="card chart-card data-panel" aria-labelledby="dispatch-soc-title">
+        <div class="card-head">
+          <div><span class="eyebrow">Kondisi Baterai</span>
+            <h2 id="dispatch-soc-title">Tingkat Isi Baterai (SOC)</h2>
+          </div><span class="chart-unit">%</span>
+        </div>
+        <p class="chart-insight" id="dispatch-soc-summary">Memuat rentang SOC…</p>
+        <div class="chart-box dispatch-soc"><canvas id="chart-dispatch-soc" role="img"
+            aria-label="Profil SOC dan batas operasi selama 24 jam" aria-describedby="dispatch-soc-summary"></canvas>
+        </div>
+      </section>
+
+      <details class="details-panel data-panel" id="dispatch-table-details">
+        <summary><span><strong>Tabel 96 Interval</strong><small>Alternatif data untuk grafik
+              profil</small></span><span>15 menit</span></summary>
+        <div class="table-scroll" tabindex="0" aria-label="Tabel profil 96 interval dapat digulir horizontal">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Waktu</th>
+                <th scope="col">Beban (kW)</th>
+                <th scope="col">Genset (kW)</th>
+                <th scope="col">PV (kW)</th>
+                <th scope="col">BESS (kW)</th>
+                <th scope="col">SOC (%)</th>
+              </tr>
+            </thead>
+            <tbody id="dispatch-table-body"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="page-view" data-view="monthly" aria-labelledby="monthly-title">
+      <div class="page-heading">
+        <div><span class="kicker">Perbandingan Skenario</span>
+          <h1 id="monthly-title">Kinerja Bulanan</h1>
+          <p>Target laporan, tren harian, dan delta terhadap Baseline.</p>
+        </div>
+        <div class="period-lockup" aria-label="Periode laporan"><span>Periode Laporan</span><strong>Januari
+            2025</strong><small>1 periode tersedia</small></div>
+      </div>
+
+      <section class="scenario-scoreboard data-panel" aria-label="Peringkat biaya bulanan per skenario">
+        <div class="scoreboard-intro"><span class="eyebrow">Peta Efisiensi</span>
+          <h2>Biaya Bulanan</h2>
+          <p>Semakin pendek batang, semakin rendah biaya sumber laporan.</p>
+        </div>
+        <article data-score-scenario="baseline"><span><b>01</b>Baseline</span><strong
+            id="score-baseline-cost">—</strong><i><em id="score-baseline-bar"></em></i><small>Acuan</small></article>
+        <article data-score-scenario="hemat"><span><b>02</b>Hemat</span><strong id="score-hemat-cost">—</strong><i><em
+              id="score-hemat-bar"></em></i><small id="score-hemat-delta">— vs Baseline</small></article>
+        <article data-score-scenario="hemat_plus"><span><b>03</b>Hemat Plus</span><strong
+            id="score-hemat-plus-cost">—</strong><i><em id="score-hemat-plus-bar"></em></i><small
+            id="score-hemat-plus-delta">— vs Baseline</small></article>
+      </section>
+
+      <section class="metric-grid metric-grid-three data-panel" aria-label="Insight bulanan">
+        <article class="metric-card"><span>Penghematan Hemat Plus</span><strong
+            id="monthly-saving">—</strong><small>terhadap Baseline · biaya sumber</small></article>
+        <article class="metric-card"><span>Intensitas BBM Terbaik</span><strong
+            id="monthly-intensity">—</strong><small>liter/kWh · Hemat Plus</small></article>
+        <article class="metric-card"><span>Penurunan Jam Genset</span><strong
+            id="monthly-hours-drop">—</strong><small>terhadap Baseline</small></article>
+      </section>
+
+      <section class="card chart-card data-panel" aria-labelledby="monthly-chart-title">
+        <div class="card-head">
+          <div><span class="eyebrow">Tren 31 Hari</span>
+            <h2 id="monthly-chart-title">Performa Harian per Skenario</h2>
+          </div>
+          <label class="metric-select" for="monthly-metric"><span>Indikator</span><select id="monthly-metric"
+              name="monthly_metric" autocomplete="off">
+              <option value="generator_hours">Jam genset</option>
+              <option value="pv_absorbed_kwh">PV terserap</option>
+              <option value="curtailment_kwh">Curtailment</option>
+            </select></label>
+        </div>
+        <p class="chart-insight" id="monthly-chart-summary">Memuat tren bulanan…</p>
+        <div class="chart-box monthly"><canvas id="chart-monthly-trend" role="img"
+            aria-label="Tren harian tiga skenario" aria-describedby="monthly-chart-summary"></canvas></div>
+      </section>
+
+      <section class="card table-card data-panel" aria-labelledby="monthly-table-title">
+        <div class="card-head">
+          <div><span class="eyebrow">Sumber Laporan · Januari 2025</span>
+            <h2 id="monthly-table-title">Matriks KPI Skenario</h2>
+          </div><span class="table-unit">Kolom aktif mengikuti skenario</span>
+        </div>
+        <div class="table-scroll" tabindex="0" aria-label="Tabel KPI bulanan dapat digulir horizontal">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Indikator</th>
+                <th scope="col">Baseline</th>
+                <th scope="col">Hemat</th>
+                <th scope="col">Hemat Plus</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page-view" data-view="risk" aria-labelledby="risk-title">
+      <div class="page-heading">
+        <div><span class="kicker">Analisis Ketidakpastian</span>
+          <h1 id="risk-title">Risiko Biaya Operasi</h1>
+          <p>Ringkasan indikator risiko dan konteks distribusi biaya yang direkonstruksi.</p>
+        </div>
+      </div>
+
+      <section class="risk-verdict data-panel" aria-labelledby="risk-verdict-title">
+        <div><span class="eyebrow">Kesimpulan Risiko</span>
+          <h2 id="risk-verdict-title">Mengukur jarak biaya tipikal ke skenario ekor…</h2>
+          <p id="risk-verdict-copy">Ringkasan risiko sedang diproses.</p>
+        </div>
+        <div class="risk-reserve-dial" role="img" aria-label="Cadangan risiko relatif terhadap biaya rata-rata"><span
+            id="risk-reserve-pct">—</span><small>cadangan / rata-rata</small></div>
+      </section>
+
+      <section class="metric-grid metric-grid-four data-panel" aria-label="Indikator risiko biaya">
+        <article class="metric-card"><span>Biaya Rata-rata</span><strong id="risk-mean">—</strong><small>nilai tengah
+            distribusi</small></article>
+        <article class="metric-card"><span>VaR 95%</span><strong id="risk-var">—</strong><small>batas persentil</small>
+        </article>
+        <article class="metric-card"><span>CVaR 95%</span><strong id="risk-cvar">—</strong><small>rata-rata ekor</small>
+        </article>
+        <article class="metric-card"><span>Cadangan Risiko</span><strong id="risk-reserve">—</strong><small>VaR −
+            rata-rata</small></article>
+      </section>
+
+      <section class="card risk-ladder data-panel" aria-labelledby="risk-ladder-title">
+        <div class="card-head">
+          <div><span class="eyebrow">Posisi Risiko</span>
+            <h2 id="risk-ladder-title">Ladder Biaya Harian</h2>
+          </div><span class="chart-unit">IDR</span>
+        </div>
+        <div class="risk-scale" id="risk-scale" role="img"
+          aria-label="Skala posisi rata-rata, VaR 95 persen, dan CVaR 95 persen">
+          <div class="risk-track"><span></span></div>
+          <div class="risk-marker mean" id="risk-marker-mean"><i></i><span>Rata-rata</span><strong
+              id="risk-scale-mean-value">—</strong></div>
+          <div class="risk-marker var" id="risk-marker-var"><i></i><span>VaR 95%</span><strong
+              id="risk-scale-var-value">—</strong></div>
+          <div class="risk-marker cvar" id="risk-marker-cvar"><i></i><span>CVaR 95%</span><strong
+              id="risk-scale-cvar-value">—</strong></div>
+          <div class="risk-axis"><span>Risiko lebih rendah</span><span>Risiko ekor lebih tinggi</span></div>
+        </div>
+      </section>
+
+      <section class="card chart-card data-panel" aria-labelledby="risk-chart-title">
+        <div class="card-head">
+          <div><span class="eyebrow">Distribusi Direkonstruksi</span>
+            <h2 id="risk-chart-title">Histogram Skenario</h2>
+          </div><span class="weather-pill">Seed tetap</span>
+        </div>
+        <p class="chart-insight" id="risk-chart-summary">Memuat distribusi risiko…</p>
+        <div class="chart-box risk"><canvas id="chart-risk" role="img"
+            aria-label="Histogram biaya dengan penanda rata-rata, VaR, dan CVaR"
+            aria-describedby="risk-chart-summary"></canvas></div>
+      </section>
+
+      <details class="details-panel data-panel">
+        <summary><span><strong>Definisi & Parameter Risiko</strong><small>Konteks interpretasi indikator
+              risiko</small></span><span>Metodologi</span></summary>
+        <div class="risk-definitions">
+          <p><strong>VaR 95%</strong> adalah batas biaya pada persentil ke-95. <strong>CVaR 95%</strong> adalah
+            rata-rata biaya pada ekor di atas batas tersebut.</p>
+          <dl>
+            <div>
+              <dt>Jumlah skenario</dt>
+              <dd id="risk-count">—</dd>
+            </div>
+            <div>
+              <dt>Alpha</dt>
+              <dd id="risk-alpha">—</dd>
+            </div>
+            <div>
+              <dt>Sigma PV</dt>
+              <dd id="risk-sigma">—</dd>
+            </div>
+            <div>
+              <dt>Harga BBM</dt>
+              <dd id="risk-fuel-price">—</dd>
+            </div>
+            <div>
+              <dt>Penalti start</dt>
+              <dd id="risk-start-penalty">—</dd>
+            </div>
+          </dl>
+          <p class="method-note">Ringkasan risiko adalah angka laporan. Bentuk histogram dibuat ulang karena sampel
+            mentah tidak tersedia.</p>
+        </div>
+      </details>
+    </section>
+
+    <div id="modules-container"></div>
+
+    <details class="methodology-panel">
+      <summary><span><strong>Metodologi, Dataset & Provenance</strong><small>Audit sumber dan batas
+            penggunaan</small></span><span>Lihat detail</span></summary>
+      <nav class="methodology-index" aria-label="Bagian metodologi"><a href="#method-dataset">01 Dataset</a><a
+          href="#method-assumptions">02 Asumsi Model</a><a href="#method-limits">03 Batas Penggunaan</a></nav>
+      <div class="methodology-grid">
+        <section id="method-dataset"><span class="eyebrow">Dataset Aktif</span>
+          <h2>Januari 2025</h2>
+          <dl>
+            <div>
+              <dt>Target harian</dt>
+              <dd id="dataset-target-count">93 baris</dd>
+            </div>
+            <div>
+              <dt>Titik profil</dt>
+              <dd id="dataset-interval-count">8.928 titik</dd>
+            </div>
+            <div>
+              <dt>Skenario</dt>
+              <dd id="dataset-scenario-count">3</dd>
+            </div>
+          </dl>
+        </section>
+        <section id="method-assumptions"><span class="eyebrow">Asumsi Model</span>
+          <h2>120 / 240 / 120</h2>
+          <p>120 kW PV · 240 kWh BESS · 120 kW genset</p>
+          <p>Konvensi BESS: positif discharge, negatif charging.</p>
+        </section>
+        <section id="method-limits"><span class="eyebrow">Batas Penggunaan</span>
+          <h2>Data Riset Terisolasi</h2>
+          <p id="provenance-text">Agregat laporan dan kurva rekonstruksi tidak terhubung ke telemetri operasional.</p>
+          <strong class="not-measured">Bukan pengukuran alat</strong>
+        </section>
+      </div>
+    </details>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-tribute">
+        <img class="footer-logo-me" src="/static/img/logo_me.png" width="36" height="36" loading="lazy"
+          alt="Logo Lab Manajemen Energi">
+        <span><strong>Lab Manajemen Energi</strong><small>Teknik Fisika · Institut Teknologi Bandung</small></span>
+      </div>
+      <div class="footer-tribute">
+        <img class="footer-logo-cita" src="/static/img/logo_cita.png" width="96" height="20" loading="lazy"
+          alt="Logo CITA ITB">
+        <span><strong>Lab Center for Instrumentation Technology &amp; Automation (CITA)</strong><small>Teknik Fisika ·
+            Institut Teknologi Bandung</small></span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+
+</html>

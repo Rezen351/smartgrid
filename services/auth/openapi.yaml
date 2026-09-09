@@ -1,0 +1,591 @@
+openapi: 3.0.3
+info:
+  title: SmartGrid Auth API
+  version: 1.0.0
+  description: REST API untuk autentikasi dan manajemen pengguna SmartGrid (register, login, JWT, RBAC, profil, admin).
+
+servers:
+  - url: http://localhost:8080
+    description: Auth service (Go/Chi)
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check auth service
+      security: []
+      responses:
+        "200":
+          description: Service sehat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Daftar akun baru dengan role default viewer
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        "201":
+          description: Register berhasil, mengembalikan token pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        "400":
+          description: Request body tidak valid / field kosong / password kurang dari 8 karakter
+        "409":
+          description: Email atau username sudah terdaftar
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login dengan email atau username, mengembalikan token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        "401":
+          description: Email/username atau password salah
+        "403":
+          description: Akun tidak aktif
+        "500":
+          description: Login gagal
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Tukar refresh token lama dengan access token + refresh token baru (rotation)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        "200":
+          description: Token pair baru
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        "400":
+          description: refresh_token wajib diisi
+        "401":
+          description: Refresh token tidak valid atau expired
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout — revoke semua refresh token milik user
+      responses:
+        "200":
+          description: Logout berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "401":
+          description: Tidak terautentikasi
+
+  /auth/me:
+    get:
+      tags: [Profile]
+      summary: Ambil profil user yang sedang login
+      responses:
+        "200":
+          description: Data profil user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        "401":
+          description: Tidak terautentikasi
+
+    put:
+      tags: [Profile]
+      summary: Update username dan/atau email profil
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        "200":
+          description: Profil berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        "400":
+          description: Body tidak valid / tidak ada field yang diisi
+        "401":
+          description: Tidak terautentikasi
+        "409":
+          description: Username atau email baru sudah dipakai user lain
+
+  /auth/password:
+    put:
+      tags: [Profile]
+      summary: Ganti password (verifikasi password lama, revoke semua sesi)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        "200":
+          description: Password berhasil diganti
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "400":
+          description: current_password atau new_password kosong / new_password kurang dari 8 karakter
+        "401":
+          description: Password lama salah / tidak terautentikasi
+        "500":
+          description: Gagal mengganti password
+
+  /auth/account:
+    delete:
+      tags: [Profile]
+      summary: Hapus akun (soft delete) setelah konfirmasi password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  description: Konfirmasi password akun
+      responses:
+        "200":
+          description: Akun berhasil dinonaktifkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "400":
+          description: Konfirmasi password wajib diisi
+        "401":
+          description: Password konfirmasi salah / tidak terautentikasi
+        "500":
+          description: Gagal menghapus akun
+
+  /auth/sessions:
+    get:
+      tags: [Profile]
+      summary: Daftar sesi aktif (refresh token) milik user yang login
+      responses:
+        "200":
+          description: Daftar sesi aktif
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      sessions:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SessionResponse'
+                      count:
+                        type: integer
+        "401":
+          description: Tidak terautentikasi
+        "500":
+          description: Gagal mengambil daftar sesi
+
+  /auth/users:
+    get:
+      tags: [Admin]
+      summary: List semua user (hanya admin)
+      responses:
+        "200":
+          description: Daftar user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      users:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UserSummary'
+                      count:
+                        type: integer
+        "401":
+          description: Tidak terautentikasi
+        "403":
+          description: Bukan admin
+        "500":
+          description: Gagal mengambil daftar user
+
+  /auth/roles:
+    get:
+      tags: [Admin]
+      summary: List semua role yang tersedia di sistem (hanya admin)
+      responses:
+        "200":
+          description: Daftar role
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      roles:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Role'
+        "401":
+          description: Tidak terautentikasi
+        "403":
+          description: Bukan admin
+        "500":
+          description: Gagal mengambil daftar role
+
+  /auth/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Detail user by ID (hanya admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detail user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSummary'
+        "400":
+          description: User ID kosong
+        "401":
+          description: Tidak terautentikasi
+        "403":
+          description: Bukan admin
+        "404":
+          description: User tidak ditemukan
+        "500":
+          description: Gagal mengambil detail user
+
+    put:
+      tags: [Admin]
+      summary: Update user: ubah active status dan/atau roles (hanya admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUserRequest'
+      responses:
+        "200":
+          description: User berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSummary'
+        "400":
+          description: Body tidak valid / ID kosong / tidak ada field yang diupdate
+        "401":
+          description: Tidak terautentikasi
+        "403":
+          description: Bukan admin / mencoba modifikasi diri sendiri / admin terakhir
+        "404":
+          description: User tidak ditemukan
+        "409":
+          description: Role tidak valid / admin terakhir akan dihapus
+        "500":
+          description: Gagal memperbarui user
+
+    delete:
+      tags: [Admin]
+      summary: Hapus user by ID (soft delete, hanya admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User berhasil dihapus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "400":
+          description: User ID kosong
+        "401":
+          description: Tidak terautentikasi
+        "403":
+          description: Bukan admin / mencoba hapus diri sendiri / admin terakhir
+        "404":
+          description: User tidak ditemukan
+        "500":
+          description: Gagal menghapus user
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Gunakan access token yang didapat dari `/auth/login` atau `/auth/refresh`.
+        Header: `Authorization: Bearer <access_token>`
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required: [password]
+      properties:
+        identifier:
+          type: string
+          description: Email atau username (prioritas jika diisi)
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        password:
+          type: string
+          minLength: 8
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token yang masih aktif
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+
+    AdminUpdateUserRequest:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          description: Masa berlaku access token dalam detik
+
+    MeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        user_agent:
+          type: string
+        ip_address:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/TokenPair'
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, INTERNAL_ERROR]
+            message:
+              type: string

@@ -1,0 +1,846 @@
+openapi: 3.0.3
+info:
+  title: SmartGrid Module API
+  version: 1.0.0
+  description: REST API untuk manajemen module dan node IoT SmartGrid.
+
+servers:
+  - url: http://localhost:8080
+    description: Module service (Go/Chi)
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check module service
+      security: []
+      responses:
+        "200":
+          description: Service sehat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /modules:
+    get:
+      tags: [Modules]
+      summary: List semua module
+      responses:
+        "200":
+          description: Daftar module
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      modules:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Module'
+                      count:
+                        type: integer
+        "401":
+          description: Tidak terautentikasi
+        "500":
+          description: Gagal mengambil daftar module
+
+    post:
+      tags: [Modules]
+      summary: Buat module baru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateModuleRequest'
+      responses:
+        "201":
+          description: Module berhasil dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Module'
+        "400":
+          description: Body tidak valid / name/description mengandung karakter ilegal
+        "401":
+          description: Tidak terautentikasi
+        "500":
+          description: Gagal membuat module
+
+  /modules/{id}:
+    get:
+      tags: [Modules]
+      summary: Ambil detail module
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detail module
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Module'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Module tidak ditemukan
+        "500":
+          description: Gagal mengambil module
+
+    put:
+      tags: [Modules]
+      summary: Update module
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModuleRequest'
+      responses:
+        "200":
+          description: Module berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Module'
+        "400":
+          description: Body tidak valid / name/description mengandung karakter ilegal
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Module tidak ditemukan
+        "500":
+          description: Gagal memperbarui module
+
+    delete:
+      tags: [Modules]
+      summary: Hapus module dan unpair semua nodenya
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Module berhasil dihapus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Module tidak ditemukan
+        "500":
+          description: Gagal menghapus module
+
+  /nodes:
+    get:
+      tags: [Nodes]
+      summary: List node (dengan filter opsional)
+      parameters:
+        - name: paired
+          in: query
+          schema:
+            type: boolean
+          description: Filter berdasarkan status pairing
+        - name: module_id
+          in: query
+          schema:
+            type: string
+          description: Filter berdasarkan module ID
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter berdasarkan status node
+      responses:
+        "200":
+          description: Daftar node
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      nodes:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Node'
+                      count:
+                        type: integer
+        "401":
+          description: Tidak terautentikasi
+        "500":
+          description: Gagal mengambil daftar node
+
+  /nodes/discovered:
+    get:
+      tags: [Nodes]
+      summary: List node yang belum dipair (kandidat onboarding)
+      responses:
+        "200":
+          description: Daftar node belum dipair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      nodes:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Node'
+                      count:
+                        type: integer
+        "401":
+          description: Tidak terautentikasi
+        "500":
+          description: Gagal mengambil daftar node
+
+  /nodes/{node_id}/live:
+    get:
+      tags: [Nodes]
+      summary: Ambil live telemetry terkini langsung dari Redis cache
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Live telemetry payload
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Telemetri tidak ditemukan atau sudah expired di Redis
+
+  /nodes/{node_id}:
+    get:
+      tags: [Nodes]
+      summary: Ambil detail node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detail node
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Node'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal mengambil node
+
+    delete:
+      tags: [Nodes]
+      summary: Hapus node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Node berhasil dihapus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal menghapus node
+
+  /nodes/{node_id}/pair:
+    post:
+      tags: [Nodes]
+      summary: Pair node ke module
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairRequest'
+      responses:
+        "200":
+          description: Node berhasil dipair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Node'
+        "400":
+          description: module_id tidak valid / name mengandung karakter ilegal
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node/module tidak ditemukan
+        "500":
+          description: Gagal pair node
+
+  /nodes/{node_id}/unpair:
+    post:
+      tags: [Nodes]
+      summary: Unpair node dari module
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Node berhasil di-unpair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Node'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal unpair node
+
+  /nodes/{node_id}/tags:
+    get:
+      tags: [Telemetry]
+      summary: Ambil konfigurasi tag telemetry sensor untuk node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daftar tag sensor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      node_id:
+                        type: string
+                      tags:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeTag'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal mengambil tag
+
+    post:
+      tags: [Telemetry]
+      summary: Tambah satu tag telemetry sensor untuk node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeTagRequest'
+      responses:
+        "200":
+          description: Tag berhasil ditambahkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      node_id:
+                        type: string
+                      tags:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeTag'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal menambahkan tag
+
+    put:
+      tags: [Telemetry]
+      summary: Ganti seluruh konfigurasi tag telemetry sensor untuk node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/NodeTagRequest'
+      responses:
+        "200":
+          description: Tag berhasil diganti
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      node_id:
+                        type: string
+                      tags:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeTag'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal mengganti tag
+
+  /nodes/{node_id}/tags/{id}:
+    delete:
+      tags: [Telemetry]
+      summary: Hapus tag telemetry sensor
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tag berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      node_id:
+                        type: string
+                      deleted:
+                        type: string
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Tag tidak ditemukan
+        "500":
+          description: Gagal menghapus tag
+
+  /nodes/{node_id}/actuators:
+    get:
+      tags: [Actuators]
+      summary: Ambil konfigurasi tag actuator untuk node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daftar tag actuator
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      node_id:
+                        type: string
+                      tags:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeTag'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal mengambil actuator tags
+
+    post:
+      tags: [Actuators]
+      summary: Tambah tag actuator untuk node
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeTagRequest'
+      responses:
+        "201":
+          description: Tag actuator berhasil ditambahkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeTag'
+        "400":
+          description: Body tidak valid / kind harus actuator
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal menambahkan actuator tag
+
+  /nodes/{node_id}/actuators/{id}:
+    delete:
+      tags: [Actuators]
+      summary: Hapus tag actuator
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tag actuator berhasil dihapus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        "401":
+          description: Tidak terautentikasi
+        "404":
+          description: Node tidak ditemukan
+        "500":
+          description: Gagal menghapus actuator tag
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Gunakan access token yang didapat dari auth service.
+        Header: `Authorization: Bearer <access_token>`
+
+  schemas:
+    Module:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          type: string
+          description: JSON blob konfigurasi module
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Node'
+          nullable: true
+
+    CreateModuleRequest:
+      type: object
+      required: [name, description]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          type: string
+
+    UpdateModuleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        config:
+          type: string
+          nullable: true
+
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+        node_id:
+          type: string
+          description: Node ID firmware (berbasis MAC)
+        module_id:
+          type: string
+          nullable: true
+          description: ID module tempat node dipair (nilai jika dipair)
+        name:
+          type: string
+        mac:
+          type: string
+        ip:
+          type: string
+        fw_version:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, unknown]
+        paired:
+          type: boolean
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        discovered_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PairRequest:
+      type: object
+      required: [module_id]
+      properties:
+        module_id:
+          type: string
+        name:
+          type: string
+
+    NodeTag:
+      type: object
+      properties:
+        id:
+          type: string
+        node_id:
+          type: string
+        kind:
+          type: string
+          enum: [sensor, actuator]
+        source_key:
+          type: string
+          description: Kunci telemetry dari firmware
+        tag_name:
+          type: string
+          description: Nama tag di database
+        display_name:
+          type: string
+        unit:
+          type: string
+        data_type:
+          type: string
+          enum: [float, int, bool]
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NodeTagRequest:
+      type: object
+      required: [source_key, tag_name]
+      properties:
+        id:
+          type: string
+          nullable: true
+        kind:
+          type: string
+          enum: [sensor, actuator]
+          default: sensor
+        source_key:
+          type: string
+        tag_name:
+          type: string
+        display_name:
+          type: string
+        unit:
+          type: string
+        data_type:
+          type: string
+          enum: [float, int, bool]
+        enabled:
+          type: boolean
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, INTERNAL_ERROR]
+            message:
+              type: string

@@ -20,3 +20,39 @@ scrape_configs:
     static_configs:
       - targets: [grafana:3000]
 
+  - job_name: module
+    static_configs:
+      - targets: [module:8080]
+
+  - job_name: auth
+    static_configs:
+      - targets: [auth:8080]
+
+  - job_name: nats
+    static_configs:
+      - targets: [nats:8222]
+
+  - job_name: redis
+    static_configs:
+      - targets: [redis-exporter:9121]
+
+  - job_name: mariadb-module
+    static_configs:
+      - targets: [mariadb-module-exporter:9104]
+
+  - job_name: timescaledb-module
+    static_configs:
+      - targets: [timescaledb-exporter:9187]
+
+  - job_name: mosquitto
+    static_configs:
+      - targets: [mosquitto-exporter:9123]
+
+  - job_name: nginx
+    static_configs:
+      - targets: [nginx-exporter:9113]
+
+  - job_name: dashboard
+    static_configs:
+      - targets: [dashboard:5000]
+

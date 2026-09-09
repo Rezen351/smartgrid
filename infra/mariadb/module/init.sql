@@ -1,0 +1,2 @@
+-- Module DB schema is managed by GORM AutoMigrate (migrate.go).
+-- This file exists so the MariaDB entrypoint does not fail on an empty initdb.d.

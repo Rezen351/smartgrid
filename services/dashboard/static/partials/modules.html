@@ -1,0 +1,325 @@
+<section class="page-view modules-page" data-view="modules" aria-labelledby="modules-title">
+  <div class="page-heading">
+    <div>
+      <span class="kicker">Perangkat &amp; IoT SmartGrid</span>
+      <h1 id="modules-title">Manajemen Modul &amp; Node</h1>
+      <p>Orkestrasi modul fungsional, pairing mikrokontroler firmware, query telemetri live, dan konfigurasi tag
+        sensor/aktuator.</p>
+    </div>
+    <div class="modules-action-bar">
+      <button type="button" class="btn-primary" id="btn-open-create-module">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Tambah Modul</span>
+      </button>
+      <button type="button" class="btn-secondary" id="btn-refresh-modules" title="Segarkan Data">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Segarkan</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI Overview Cards -->
+  <div class="modules-kpi-grid">
+    <div class="mod-kpi-card">
+      <span class="mod-kpi-label">Total Modul</span>
+      <strong class="mod-kpi-value" id="kpi-mod-count">0</strong>
+      <small class="mod-kpi-hint">Grup modul fungsional</small>
+    </div>
+    <div class="mod-kpi-card">
+      <span class="mod-kpi-label">Total Node Terhubung</span>
+      <strong class="mod-kpi-value" id="kpi-paired-nodes">0</strong>
+      <small class="mod-kpi-hint">Perangkat aktif ter-pair</small>
+    </div>
+    <div class="mod-kpi-card">
+      <span class="mod-kpi-label">Node Online</span>
+      <strong class="mod-kpi-value is-online" id="kpi-online-nodes">0</strong>
+      <small class="mod-kpi-hint">Status node yang aktif</small>
+    </div>
+    <div class="mod-kpi-card" id="kpi-discovered-card">
+      <span class="mod-kpi-label">Node Baru Ditemukan</span>
+      <strong class="mod-kpi-value is-discovered" id="kpi-discovered-nodes">0</strong>
+      <small class="mod-kpi-hint" id="kpi-discovered-hint">Menunggu dipasangkan</small>
+    </div>
+  </div>
+
+  <!-- Modules Inner Navigation Tabs -->
+  <div class="modules-tab-bar" role="tablist">
+    <button type="button" class="mod-tab-btn is-active" data-tab="tab-modules" role="tab" aria-selected="true">Daftar
+      Modul</button>
+    <button type="button" class="mod-tab-btn" data-tab="tab-nodes" role="tab" aria-selected="false">Nodes &amp;
+      Onboarding <span class="tab-badge" id="discovered-badge" style="display:none;">0</span></button>
+    <button type="button" class="mod-tab-btn" data-tab="tab-tags" role="tab" aria-selected="false">Konfigurasi
+      Sensor &amp; Aktuator</button>
+  </div>
+
+  <!-- Tab Content 1: Modules List -->
+  <div class="mod-tab-pane is-active" id="tab-modules">
+    <div class="modules-grid" id="modules-list-container">
+      <div class="empty-state">Memuat data modul...</div>
+    </div>
+  </div>
+
+  <!-- Tab Content 2: Nodes & Onboarding -->
+  <div class="mod-tab-pane" id="tab-nodes">
+    <div class="discovered-panel" id="discovered-panel" style="display:none;">
+      <div class="discovered-header">
+        <div class="discovered-title">
+          <span class="pulse-dot"></span>
+          <strong>Perangkat Baru Ditemukan (MQTT Auto-Discovery)</strong>
+        </div>
+        <p>Perangkat mikrokontroler baru mendeteksi jaringan broker MQTT dan siap dipasangkan ke modul.</p>
+      </div>
+      <div class="discovered-cards" id="discovered-nodes-list"></div>
+    </div>
+
+    <div class="nodes-table-card">
+      <div class="table-card-head">
+        <h3>Daftar Seluruh Node IoT</h3>
+        <div class="table-filters">
+          <select id="filter-node-status" class="filter-select">
+            <option value="">Semua Status</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
+          <select id="filter-node-module" class="filter-select">
+            <option value="">Semua Modul</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Status (Redis)</th>
+              <th>Hardware ID</th>
+              <th>Nama Node</th>
+              <th>Modul</th>
+              <th>IP / MAC</th>
+              <th>Firmware</th>
+              <th>Terakhir Terlihat</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="nodes-table-body">
+            <tr>
+              <td colspan="8" class="table-empty">Memuat daftar node...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Content 3: Tags Configuration -->
+  <div class="mod-tab-pane" id="tab-tags">
+    <div class="tags-config-container">
+      <div class="tags-selector-bar">
+        <label for="tags-node-select"><strong>Pilih Node untuk Mengelola Tag:</strong></label>
+        <select id="tags-node-select" class="node-picker-select">
+          <option value="">-- Pilih Node --</option>
+        </select>
+      </div>
+
+      <div id="tags-manager-content" style="display:none;">
+        <!-- Sensor Tags Section -->
+        <div class="tag-section-card">
+          <div class="tag-card-head">
+            <div>
+              <h4>Sensor Telemetry Tags</h4>
+              <small>Metrik telemetri yang dipetakan dari payload firmware ke database time-series</small>
+            </div>
+            <button type="button" class="btn-sm-primary" id="btn-add-sensor-tag">+ Tambah Sensor Tag</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Source Key</th>
+                  <th>Tag Name (DB)</th>
+                  <th>Display Name</th>
+                  <th>Unit</th>
+                  <th>Tipe Data</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="sensor-tags-table-body">
+                <tr>
+                  <td colspan="7" class="table-empty">Belum ada tag sensor</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Actuator Tags Section -->
+        <div class="tag-section-card">
+          <div class="tag-card-head">
+            <div>
+              <h4>Actuator Control Tags</h4>
+              <small>Kunci aktuator (relay, switch, output PWM) yang dapat dikontrol</small>
+            </div>
+            <button type="button" class="btn-sm-primary" id="btn-add-actuator-tag">+ Tambah Actuator Tag</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Source Key</th>
+                  <th>Tag Name (DB)</th>
+                  <th>Display Name</th>
+                  <th>Unit</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="actuator-tags-table-body">
+                <tr>
+                  <td colspan="6" class="table-empty">Belum ada tag aktuator</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Modals for Module Operations -->
+<div class="modal-overlay" id="modal-module" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modal-module-title">Tambah Modul Baru</h3>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <form id="form-module">
+      <input type="hidden" id="mod-edit-id" value="">
+      <div class="form-group">
+        <label for="mod-input-name">Nama Modul *</label>
+        <input type="text" id="mod-input-name" required placeholder="Contoh: Modul PLTS Barat">
+      </div>
+      <div class="form-group">
+        <label for="mod-input-desc">Deskripsi</label>
+        <input type="text" id="mod-input-desc" placeholder="Contoh: Monitoring inverter string 1-4">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" data-close-modal>Batal</button>
+        <button type="submit" class="btn-primary" id="btn-submit-module">Simpan Modul</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Pair Node -->
+<div class="modal-overlay" id="modal-pair" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Pasangkan Node ke Modul</h3>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <form id="form-pair">
+      <div class="form-group">
+        <label>Hardware ID (Node ID)</label>
+        <input type="text" id="pair-node-id" readonly class="input-readonly">
+      </div>
+      <div class="form-group">
+        <label for="pair-target-module">Pilih Modul Tujuan *</label>
+        <select id="pair-target-module" required class="form-select">
+          <option value="">-- Pilih Modul --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="pair-node-name">Nama Node (Friendly Name)</label>
+        <input type="text" id="pair-node-name" placeholder="Contoh: Sensor Inverter 1">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" data-close-modal>Batal</button>
+        <button type="submit" class="btn-primary" id="btn-submit-pair">Pasangkan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Tag (Sensor / Actuator) -->
+<div class="modal-overlay" id="modal-tag" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modal-tag-title">Tambah Tag</h3>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <form id="form-tag">
+      <input type="hidden" id="tag-kind" value="sensor">
+      <div class="form-group">
+        <label for="tag-source-key">Source Key (dari Firmware) *</label>
+        <div class="source-key-row">
+          <input type="text" id="tag-source-key" required placeholder="Contoh: pv_voltage">
+          <button type="button" class="btn-sm-secondary" id="btn-auto-detect-key"
+            title="Ambil otomatis dari telemetri live (Redis)">Auto Detect</button>
+        </div>
+        <small class="form-hint" id="auto-detect-hint">Klik "Auto Detect" untuk mengisi source key dari payload
+          telemetri terbaru node.</small>
+        <div id="key-picker-container" style="display:none;"></div>
+      </div>
+      <div class="form-group">
+        <label for="tag-name">Tag Name (di Database) *</label>
+        <input type="text" id="tag-name" required placeholder="Contoh: pv_voltage">
+      </div>
+      <div class="form-group">
+        <label for="tag-display-name">Display Name</label>
+        <input type="text" id="tag-display-name" placeholder="Contoh: Tegangan PV">
+      </div>
+      <div class="form-group">
+        <label for="tag-unit">Satuan (Unit)</label>
+        <input type="text" id="tag-unit" placeholder="Contoh: V, A, kW, °C">
+      </div>
+      <div class="form-group" id="group-tag-datatype">
+        <label for="tag-datatype">Tipe Data</label>
+        <select id="tag-datatype" class="form-select">
+          <option value="float">Float</option>
+          <option value="int">Integer</option>
+          <option value="bool">Boolean</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" data-close-modal>Batal</button>
+        <button type="submit" class="btn-primary" id="btn-submit-tag">Simpan Tag</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Live Telemetry Inspector (from Redis) -->
+<div class="modal-overlay" id="modal-live" hidden>
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <div class="live-title-wrap">
+          <span class="pulse-dot"></span>
+          <h3>Live Telemetry (Redis Fast Query)</h3>
+        </div>
+        <small id="live-node-subtitle">Node: -</small>
+      </div>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="live-raw-wrap">
+        <div class="raw-header"><span>Payload Mentah dari Redis (TTL 5m)</span><span id="live-last-timestamp">—</span>
+        </div>
+        <pre class="raw-json-box" id="live-raw-content">Menunggu data telemetri...</pre>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" data-close-modal>Tutup</button>
+    </div>
+  </div>
+</div>
