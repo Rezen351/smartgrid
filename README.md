@@ -36,7 +36,7 @@ Pastikan perangkat Anda sudah memiliki:
 Clone repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Rezen351/smartgrid.git
 cd smartgrid
 ```
 
@@ -46,7 +46,11 @@ Salin konfigurasi env:
 cp .env.example .env
 ```
 
-Atau buat file `.env` jika belum ada dengan konten seperti:
+Edit `.env` dan ganti semua nilai `CHANGE_ME_*` dengan nilai yang aman. Jangan commit file `.env`.
+
+Variabel yang didukung tersedia di `.env.example`; konfigurasi DSN bersifat opsional dan hanya diperlukan jika ingin mengganti nilai default Compose.
+
+Contoh konfigurasi minimum:
 
 ```env
 # Cloudflare Tunnel
@@ -59,24 +63,24 @@ GRAFANA_ADMIN_PASSWORD=<grafana_password>
 
 # Dashboard PostgreSQL
 POSTGRES_USER=smartgrid
-POSTGRES_PASSWORD=<postgres_password>
+POSTGRES_PASSWORD=CHANGE_ME_postgres_password
 POSTGRES_DB=smartgrid
 
 # Auth PostgreSQL
 AUTH_DB_USER=auth_user
 AUTH_DB_PASSWORD=<auth_db_password>
 AUTH_DB_NAME=auth_db
-JWT_SECRET=<jwt_secret>
+JWT_SECRET=CHANGE_ME_jwt_secret
 AUTH_ADMIN_USERNAME=admin
 AUTH_ADMIN_EMAIL=admin@smartgrid.local
-AUTH_ADMIN_PASSWORD=<admin_password>
+AUTH_ADMIN_PASSWORD=CHANGE_ME_admin_password
 
 # Module Service
 MODULE_DB_USER=module_user
-MODULE_DB_PASSWORD=<module_db_password>
+MODULE_DB_PASSWORD=CHANGE_ME_module_db_password
 MODULE_DB_NAME=module_db
 TIMESCALE_DB_USER=module_user
-TIMESCALE_DB_PASSWORD=<timescale_password>
+TIMESCALE_DB_PASSWORD=CHANGE_ME_timescale_password
 TIMESCALE_DB_NAME=module_ts
 
 # Redis Shared Cache
@@ -258,8 +262,15 @@ Stack monitoring menggunakan **Prometheus** + **Grafana**:
 
 ### Mosquitto MQTT
 - MQTT broker untuk komunikasi dengan perangkat IoT
-- Port: `1883` (TCP), `9001` (WebSocket)
-- Akses WebSocket via nginx: `http://localhost:3001/` (route `/ws` jika dikonfigurasi)
+- Port: `1883` (TCP; dipublish ke host)
+- WebSocket port `9001` belum dipublish pada Compose utama; aktifkan route dan port secara eksplisit sebelum digunakan.
+
+### Export (Go)
+- Service untuk export data time-series
+- Akses melalui `http://localhost:3001/export/`
+- API versi: `http://localhost:3001/api/v1/export/`
+- Health check: `http://localhost:3001/api/v1/export/health`
+- Spesifikasi API: [docs/export_api.md](docs/export_api.md)
 
 ## Standar Kolaborasi Developer
 
@@ -311,6 +322,20 @@ Sebelum merge, pastikan:
 - [ ] Dokumentasi diperbarui bila perlu
 - [ ] Semua test / validation pipeline berhasil
 
+## Testing
+
+Validasi yang sama dengan pipeline CI dapat dijalankan secara lokal:
+
+```bash
+docker compose config
+
+for service in auth module export; do
+    (cd "services/$service" && go test -v ./... && go vet ./...)
+done
+
+(cd services/dashboard && python -m py_compile app.py history.py research.py)
+```
+
 ## CI/CD
 
 Project ini menggunakan GitHub Actions dengan tahapan berikut:
@@ -329,20 +354,6 @@ Project ini menggunakan GitHub Actions dengan tahapan berikut:
 docker compose config
 ```
 
-Untuk service aplikasi:
-
-```bash
-# Go services
-cd services/auth && go test -v ./...
-cd services/module && go test -v ./...
-cd services/export && go test -v ./...
-
-# Python service
-cd services/dashboard
-pip install -r requirements.txt
-python -m py_compile app.py history.py research.py
-```
-
 ## Keamanan dan Environment
 
 Beberapa aturan penting:
@@ -351,7 +362,25 @@ Beberapa aturan penting:
 - Pastikan `.env` masuk ke `.gitignore`.
 - Gunakan variabel environment pada pipeline CI/CD dan deployment.
 - Hindari hardcode URL atau credential di source code.
-- Gunakan Cloudflare Tunnel untuk akses eksternal yang aman.
+- Gunakan Cloudflare Tunnel untuk akses eksternal dan batasi port host sesuai kebutuhan.
+- Ganti seluruh nilai `CHANGE_ME_*` sebelum menjalankan deployment bersama atau production.
+- Jangan expose port database, NATS monitoring, Prometheus, atau Grafana ke internet tanpa autentikasi dan pembatasan jaringan.
+
+## Kontribusi
+
+1. Buat branch dari `develop` dengan pola `feature/<nama>` atau `fix/<nama>`.
+2. Jalankan validasi pada bagian [Testing](#testing).
+3. Buat commit menggunakan [Conventional Commits](https://www.conventionalcommits.org/), misalnya `feat: add export filter`.
+4. Buka Pull Request ke `develop` dan jelaskan perubahan, pengujian, serta dampak konfigurasi.
+5. Jangan menyertakan secret, data production, atau perubahan volume pada Pull Request.
+
+## Dukungan dan Pelaporan Keamanan
+
+Gunakan GitHub Issues untuk bug dan pertanyaan penggunaan. Jangan membuat issue publik untuk credential, token, atau kerentanan yang belum diperbaiki; laporkan melalui kanal privat repository dan sertakan langkah reproduksi yang aman.
+
+## Lisensi
+
+Project ini dirilis di bawah [MIT License](LICENSE).
 
 ## Deployment Notes
 
@@ -370,20 +399,3 @@ Untuk menjaga kualitas proyek:
 - buat changelog atau release notes untuk setiap milestone,
 - lakukan testing sebelum merge ke branch utama,
 - update README ketika arsitektur atau setup berubah.
-
-## Quick Start
-
-```bash
-cp .env.example .env
-# Edit .env sesuai environment Anda
-docker compose up -d
-docker compose ps
-```
-
-Jika ada perubahan konfigurasi atau service baru, lakukan validasi terlebih dahulu:
-
-```bash
-docker compose config
-```
-
----

@@ -7,10 +7,10 @@
 volumes/
 
 # Sensitive configs (generated or local overrides)
-infrastructure/docker/mosquitto/certs/
-infrastructure/docker/mosquitto/config/passwd
-infrastructure/docker/mosquitto/config/acl.acl
-infrastructure/docker/nginx/ssl/
+infra/mosquitto/certs/
+infra/mosquitto/config/passwd
+infra/mosquitto/config/acl.acl
+infra/nginx/ssl/
 
 # OS
 .DS_Store
