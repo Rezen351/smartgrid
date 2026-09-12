@@ -24,11 +24,14 @@ services:
     networks: [ smartgrid-network ]
     restart: unless-stopped
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.9.1
     container_name: smartgrid-cloudflared
     command: [ "tunnel", "run" ]
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       - ./infra/cloudflared/config.yml:/etc/cloudflared/config.yml:ro
     depends_on:
