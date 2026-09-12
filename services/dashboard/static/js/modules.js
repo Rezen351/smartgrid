@@ -7,13 +7,58 @@
   let activeNodeForTags = "";
   let liveTelemetryTimer = null;
   let liveActiveNodeID = "";
+  let editingTagId = "";
+
+  let nodeFilters = { status: "", paired: "", module_id: "" };
+
+  function readNodeFiltersFromUI() {
+    const st = byId("filter-node-status");
+    const pa = byId("filter-node-paired");
+    const mo = byId("filter-node-module");
+    nodeFilters = {
+      status: st ? st.value : "",
+      paired: pa ? pa.value : "",
+      module_id: mo ? mo.value : "",
+    };
+    return nodeFilters;
+  }
+
+  function syncNodeFiltersToUI() {
+    const st = byId("filter-node-status");
+    const pa = byId("filter-node-paired");
+    const mo = byId("filter-node-module");
+    if (st) st.value = nodeFilters.status || "";
+    if (pa) pa.value = nodeFilters.paired || "";
+    if (mo && nodeFilters.module_id !== undefined) mo.value = nodeFilters.module_id || "";
+  }
+
+  function buildNodesQuery() {
+    const params = new URLSearchParams();
+    if (nodeFilters.status) params.set("status", nodeFilters.status);
+    if (nodeFilters.paired) params.set("paired", nodeFilters.paired);
+    if (nodeFilters.module_id) params.set("module_id", nodeFilters.module_id);
+    const qs = params.toString();
+    return qs ? `/api/module/nodes?${qs}` : "/api/module/nodes";
+  }
+
+  // Backend menolak "<", ">" dan karakter kontrol pada name/description
+  // (handler.go validName). Cegah sebelum submit agar pesan jelas.
+  function assertSafeText(value, label) {
+    if (/[<>]/.test(value || "")) {
+      throw new Error(`${label} tidak boleh mengandung karakter < atau >`);
+    }
+    if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value || "")) {
+      throw new Error(`${label} mengandung karakter kontrol yang tidak diizinkan`);
+    }
+  }
 
   window.loadModulesPage = async (signal) => {
     setStatus("loading", "Memuat data modul dan perangkat IoT dari server...");
     try {
+      readNodeFiltersFromUI();
       const [modRes, nodeRes, discRes] = await Promise.all([
         apiCall("GET", "/api/module/modules", null, null),
-        apiCall("GET", "/api/module/nodes", null, null),
+        apiCall("GET", buildNodesQuery(), null, null),
         apiCall("GET", "/api/module/nodes/discovered", null, null),
       ]);
 
@@ -43,6 +88,7 @@
       renderDiscoveredPanel();
       populateModuleSelects();
       populateNodeSelectForTags();
+      syncNodeFiltersToUI();
 
       updateTimestamp();
       setStatus("success", "Data modul & IoT berhasil disinkronkan.");
@@ -52,6 +98,22 @@
       setStatus("error", `Gagal memuat data modul: ${err.message}`);
     }
   };
+
+  function nodeEffectiveStatus(n) {
+    const now = Date.now();
+    const lastSeen = n.last_seen_at ? new Date(n.last_seen_at).getTime() : null;
+    if (!lastSeen || Number.isNaN(lastSeen)) {
+      return { status: "unknown", className: "unknown", text: "Unknown" };
+    }
+    const ageMs = now - lastSeen;
+    if (ageMs > 90_000) {
+      return { status: "offline", className: "offline", text: "Offline" };
+    }
+    const s = n.status || "unknown";
+    const cls = s === "online" ? "online" : (s === "offline" ? "offline" : "unknown");
+    const text = s === "online" ? "Online (Live)" : (s === "offline" ? "Offline" : "Unknown");
+    return { status: s, className: cls, text };
+  }
 
   function renderModulesGrid() {
     const container = byId("modules-list-container");
@@ -63,7 +125,7 @@
 
     container.innerHTML = modulesList.map((m) => {
       const moduleNodes = nodesList.filter((n) => n.module_id === m.id);
-      const onlineNodes = moduleNodes.filter((n) => n.status === "online");
+      const onlineNodes = moduleNodes.filter((n) => nodeEffectiveStatus(n).status === "online");
       const desc = m.description ? escapeHtml(m.description) : "<em>Tidak ada deskripsi</em>";
 
       return `
@@ -75,6 +137,7 @@
           <p class="module-card-desc">${desc}</p>
           <div class="module-card-actions">
             <button type="button" class="btn-table-action" onclick="window.manageModuleNodes('${escapeHtml(m.id)}')">Lihat Node</button>
+            <button type="button" class="btn-table-action" onclick="window.viewModuleDetail('${escapeHtml(m.id)}')">Detail</button>
             <button type="button" class="btn-action-icon" title="Edit Modul" onclick="window.editModule('${escapeHtml(m.id)}')">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
             </button>
@@ -91,29 +154,28 @@
     const tbody = byId("nodes-table-body");
     if (!tbody) return;
 
-    const statusFilter = byId("filter-node-status") ? byId("filter-node-status").value : "";
-    const moduleFilter = byId("filter-node-module") ? byId("filter-node-module").value : "";
-
+    const moduleFilter = nodeFilters.module_id || "";
     let filtered = nodesList;
-    if (statusFilter) filtered = filtered.filter((n) => n.status === statusFilter);
     if (moduleFilter) filtered = filtered.filter((n) => n.module_id === moduleFilter);
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="table-empty">Tidak ada node yang sesuai filter.</td></tr>`;
+      const active = nodeFilters.status || nodeFilters.paired || nodeFilters.module_id
+        ? " (filter server aktif)"
+        : "";
+      tbody.innerHTML = `<tr><td colspan="8" class="table-empty">Tidak ada node yang sesuai filter${active}.</td></tr>`;
       return;
     }
 
     tbody.innerHTML = filtered.map((n) => {
+      const effective = nodeEffectiveStatus(n);
       const moduleObj = modulesList.find((m) => m.id === n.module_id);
       const moduleName = moduleObj ? escapeHtml(moduleObj.name) : (n.paired ? "Modul Terhapus" : "<em>Belum Dipasangkan</em>");
-      const statusClass = n.status === "online" ? "online" : (n.status === "offline" ? "offline" : "unknown");
-      const statusText = n.status === "online" ? "Online (Live)" : (n.status === "offline" ? "Offline" : "Unknown");
       const lastSeenText = n.last_seen_at ? formatTimeAgo(n.last_seen_at) : (n.discovered_at ? formatTimeAgo(n.discovered_at) : "—");
       const ipMac = `${escapeHtml(n.ip || "—")}<br><small style="color:var(--slate-400);">${escapeHtml(n.mac || "—")}</small>`;
 
       return `
         <tr>
-          <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+          <td><span class="status-pill ${effective.className}">${effective.text}</span></td>
           <td><strong>${escapeHtml(n.node_id)}</strong></td>
           <td>${escapeHtml(n.name || "—")}</td>
           <td>${moduleName}</td>
@@ -122,6 +184,7 @@
           <td><small title="${escapeHtml(n.last_seen_at || "")}">${lastSeenText}</small></td>
           <td>
             <div class="action-btns-group">
+              <button type="button" class="btn-table-action" title="Detail node (GET /nodes/{id})" onclick="window.viewNodeDetail('${escapeHtml(n.node_id)}')">Detail</button>
               <button type="button" class="btn-table-action live" title="Lihat Live Telemetri (Redis)" onclick="window.viewLiveTelemetry('${escapeHtml(n.node_id)}')">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Live
               </button>
@@ -230,7 +293,7 @@
     try {
       const payload = await apiCall("GET", `/api/module/nodes/${encodeURIComponent(nodeId)}/live`);
       const dataObj = (payload && payload.data) ? payload.data : payload;
-      const entries = (dataObj && typeof dataObj === "object") ? flattenObject(dataObj).filter(([k]) => !["node_id", "timestamp", "time"].includes(k)) : [];
+      const entries = (dataObj && typeof dataObj === "object") ? flattenObject(dataObj).filter(([k, v]) => !["node_id", "timestamp", "time"].includes(k) && v !== null && typeof v !== "object") : [];
 
       if (entries.length === 0) {
         container.innerHTML = `<div class="key-picker"><div class="key-picker-head"><span>Telemetri</span></div><div class="key-picker-empty">Belum ada payload telemetri untuk node ini.</div></div>`;
@@ -263,6 +326,8 @@
     }
   }
 
+  let cachedSensorTags = [];
+
   async function loadTagsForNode(nodeId) {
     activeNodeForTags = nodeId;
     const manager = byId("tags-manager-content");
@@ -280,6 +345,8 @@
 
       const sensorTags = (sensorRes && sensorRes.data && sensorRes.data.tags) || [];
       const actTags = (actRes && actRes.data && actRes.data.tags) || [];
+      cachedSensorTags = sensorTags;
+      window.currentActuatorTags = actTags;
 
       const sTbody = byId("sensor-tags-table-body");
       if (sTbody) {
@@ -295,6 +362,7 @@
               <td>${escapeHtml(t.data_type || "—")}</td>
               <td><span class="status-pill ${t.enabled ? "online" : "offline"}">${t.enabled ? "Aktif" : "Nonaktif"}</span></td>
               <td>
+                <button type="button" class="btn-table-action" onclick="window.editTag('${escapeHtml(nodeId)}', '${escapeHtml(t.id)}', 'sensor')">Edit</button>
                 <button type="button" class="btn-table-action danger" onclick="window.deleteTag('${escapeHtml(nodeId)}', '${escapeHtml(t.id)}', 'sensor')">Hapus</button>
               </td>
             </tr>
@@ -330,10 +398,96 @@
   window.manageModuleNodes = (moduleId) => {
     const tabNodesBtn = document.querySelector('.mod-tab-btn[data-tab="tab-nodes"]');
     if (tabNodesBtn) tabNodesBtn.click();
-    const filterMod = byId("filter-node-module");
-    if (filterMod) {
-      filterMod.value = moduleId;
-      renderNodesTable();
+    nodeFilters.module_id = moduleId || "";
+    syncNodeFiltersToUI();
+    window.reloadCurrent();
+  };
+
+  function fillNodeDetailModal(n) {
+    const mod = modulesList.find((m) => m.id === n.module_id);
+    const effective = nodeEffectiveStatus(n);
+    setText("node-detail-subtitle", `Hardware Node: ${n.node_id || "-"}`);
+    const statusEl = byId("node-detail-status");
+    if (statusEl) {
+      statusEl.innerHTML = `<span class="status-pill ${effective.className}">${escapeHtml(effective.text)}</span>
+        <small>${escapeHtml(n.last_seen_at ? ("Terakhir terlihat " + formatTimeAgo(n.last_seen_at)) : "Belum ada data last_seen")}</small>`;
+    }
+    setText("nd-node-id", n.node_id || "-");
+    setText("nd-name", n.name || "-");
+    setText("nd-module", mod ? `${mod.name} (${mod.id})` : (n.module_id ? n.module_id : (n.paired ? "Modul terhapus" : "Belum dipasangkan")));
+    setText("nd-paired", n.paired ? "Paired" : "Unpaired");
+    setText("nd-mac", n.mac || "-");
+    setText("nd-ip", n.ip || "-");
+    setText("nd-fw", n.fw_version || "-");
+    setText("nd-last-seen", n.last_seen_at || "-");
+    setText("nd-discovered", n.discovered_at || "-");
+    setText("nd-created", n.created_at || "-");
+    setText("nd-updated", n.updated_at || "-");
+    const tagsBtn = byId("btn-node-detail-tags");
+    if (tagsBtn) tagsBtn.onclick = () => {
+      byId("modal-node-detail").hidden = true;
+      window.manageNodeTags(n.node_id);
+    };
+    const liveBtn = byId("btn-node-detail-live");
+    if (liveBtn) liveBtn.onclick = () => {
+      byId("modal-node-detail").hidden = true;
+      window.viewLiveTelemetry(n.node_id);
+    };
+  }
+
+  // Node detail view — GET /nodes/{node_id} (sebelumnya hanya list).
+  window.viewNodeDetail = async (nodeId) => {
+    const modal = byId("modal-node-detail");
+    const cached = nodesList.find((n) => n.node_id === nodeId)
+      || discoveredList.find((n) => n.node_id === nodeId);
+    if (cached) fillNodeDetailModal(cached);
+    if (modal) modal.hidden = false;
+    setText("node-detail-subtitle", `Hardware Node: ${nodeId} (memuat...)`);
+    try {
+      const res = await apiCall("GET", `/api/module/nodes/${encodeURIComponent(nodeId)}`);
+      const detail = (res && res.data && (res.data.node || res.data)) || res.data || res;
+      if (detail && detail.node_id) fillNodeDetailModal(detail);
+    } catch (err) {
+      setText("node-detail-subtitle", `Hardware Node: ${nodeId} (detail gagal: ${err.message}, menampilkan cache)`);
+    }
+  };
+
+  // Module detail view — GET /modules/{id} + daftar node miliknya.
+  window.viewModuleDetail = async (moduleId) => {
+    const modal = byId("modal-module-detail");
+    const cached = modulesList.find((m) => m.id === moduleId);
+    if (cached) {
+      setText("module-detail-title", cached.name || "Detail Modul");
+      setText("module-detail-subtitle", `ID: ${cached.id}`);
+      setText("module-detail-desc", cached.description || "Tidak ada deskripsi.");
+    }
+    if (modal) modal.hidden = false;
+    const body = byId("module-detail-nodes-body");
+    try {
+      const res = await apiCall("GET", `/api/module/modules/${encodeURIComponent(moduleId)}`);
+      const detail = (res && res.data) || {};
+      const nodes = detail.nodes || nodesList.filter((n) => n.module_id === moduleId);
+      if (detail.name) setText("module-detail-title", detail.name);
+      if (detail.id) setText("module-detail-subtitle", `ID: ${detail.id}`);
+      if (detail.description !== undefined) setText("module-detail-desc", detail.description || "Tidak ada deskripsi.");
+      const online = nodes.filter((n) => nodeEffectiveStatus(n).status === "online").length;
+      setText("module-detail-count", `${nodes.length} Node`);
+      setText("module-detail-online", `${online} Online`);
+      if (body) {
+        body.innerHTML = nodes.length === 0
+          ? `<tr><td colspan="4" class="table-empty">Belum ada node pada modul ini.</td></tr>`
+          : nodes.map((n) => {
+              const effective = nodeEffectiveStatus(n);
+              return `<tr>
+                <td><strong>${escapeHtml(n.node_id)}</strong></td>
+                <td>${escapeHtml(n.name || "-")}</td>
+                <td><span class="status-pill ${effective.className}">${escapeHtml(effective.text)}</span></td>
+                <td><button type="button" class="btn-table-action" onclick="window.viewNodeDetail('${escapeHtml(n.node_id)}')">Detail</button></td>
+              </tr>`;
+            }).join("");
+      }
+    } catch (err) {
+      if (body) body.innerHTML = `<tr><td colspan="4" class="table-empty">Gagal memuat detail modul: ${escapeHtml(err.message)}</td></tr>`;
     }
   };
 
@@ -401,10 +555,36 @@
         ? `/api/module/nodes/${encodeURIComponent(nodeId)}/actuators/${encodeURIComponent(tagId)}`
         : `/api/module/nodes/${encodeURIComponent(nodeId)}/tags/${encodeURIComponent(tagId)}`;
       await apiCall("DELETE", endpoint);
+      if (editingTagId === tagId) editingTagId = "";
       await loadTagsForNode(nodeId);
     } catch (err) {
       alert("Gagal menghapus tag: " + err.message);
     }
+  };
+
+  window.editTag = (nodeId, tagId, kind) => {
+    if (!activeNodeForTags) return;
+    const tags = kind === "actuator"
+      ? (window.currentActuatorTags || [])
+      : cachedSensorTags;
+    const tag = tags.find((t) => t.id === tagId);
+    if (!tag) return;
+    editingTagId = tagId;
+    byId("modal-tag-title").textContent = "Edit Tag";
+    byId("tag-kind").value = kind;
+    byId("tag-edit-id").value = tagId;
+    byId("tag-source-key").value = tag.source_key || "";
+    byId("tag-name").value = tag.tag_name || "";
+    byId("tag-display-name").value = tag.display_name || "";
+    byId("tag-unit").value = tag.unit || "";
+    byId("tag-datatype").value = tag.data_type || "float";
+    const enabled = tag.enabled !== false;
+    const enabledEl = byId("tag-enabled");
+    if (enabledEl) enabledEl.checked = enabled;
+    byId("group-tag-datatype").style.display = kind === "sensor" ? "grid" : "none";
+    byId("group-tag-enabled").style.display = kind === "sensor" ? "grid" : "none";
+    byId("modal-tag").hidden = false;
+    byId("key-picker-container").style.display = "none";
   };
 
   window.viewLiveTelemetry = async (nodeId) => {
@@ -418,8 +598,10 @@
       if (!liveActiveNodeID || (modal && modal.hidden)) return;
       try {
         const payload = await apiCall("GET", `/api/module/nodes/${encodeURIComponent(liveActiveNodeID)}/live`);
-        setText("live-last-timestamp", `Update: ${new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date())}`);
         const dataObj = (payload && payload.data) ? payload.data : payload;
+        const ts = (dataObj && (dataObj.timestamp || dataObj.ts || dataObj.time)) || null;
+        const formatted = ts ? new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(ts)) : new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
+        setText("live-last-timestamp", `Update: ${formatted}`);
         const jsonStr = JSON.stringify(dataObj, null, 2);
         setText("live-raw-content", jsonStr);
       } catch (err) {
@@ -488,6 +670,7 @@
           liveTelemetryTimer = null;
         }
         liveActiveNodeID = "";
+        editingTagId = "";
         const kp = byId("key-picker-container");
         if (kp) kp.style.display = "none";
       });
@@ -506,10 +689,12 @@
         btnSubmit.textContent = "Menyimpan...";
 
         try {
+          assertSafeText(name, "Nama modul");
+          assertSafeText(description, "Deskripsi modul");
           if (editId) {
-            await apiCall("PUT", `/api/module/modules/${encodeURIComponent(editId)}`, { name, description, config: "" });
+            await apiCall("PUT", `/api/module/modules/${encodeURIComponent(editId)}`, { name, description });
           } else {
-            await apiCall("POST", "/api/module/modules", { name, description, config: "" });
+            await apiCall("POST", "/api/module/modules", { name, description, config: "{}" });
           }
           byId("modal-module").hidden = true;
           await window.reloadCurrent();
@@ -540,6 +725,7 @@
         btnSubmit.textContent = "Memasangkan...";
 
         try {
+          assertSafeText(name, "Nama node");
           await apiCall("POST", `/api/module/nodes/${encodeURIComponent(nodeId)}/pair`, { module_id: moduleId, name });
           byId("modal-pair").hidden = true;
           await window.reloadCurrent();
@@ -553,9 +739,11 @@
     }
 
     const filterStatus = byId("filter-node-status");
-    if (filterStatus) filterStatus.addEventListener("change", renderNodesTable);
+    if (filterStatus) filterStatus.addEventListener("change", () => window.reloadCurrent());
+    const filterPaired = byId("filter-node-paired");
+    if (filterPaired) filterPaired.addEventListener("change", () => window.reloadCurrent());
     const filterMod = byId("filter-node-module");
-    if (filterMod) filterMod.addEventListener("change", renderNodesTable);
+    if (filterMod) filterMod.addEventListener("change", () => window.reloadCurrent());
 
     const tagsNodeSelect = byId("tags-node-select");
     if (tagsNodeSelect) {
@@ -569,14 +757,18 @@
           alert("Pilih node terlebih dahulu.");
           return;
         }
+        editingTagId = "";
         byId("modal-tag-title").textContent = "Tambah Sensor Tag";
         byId("tag-kind").value = "sensor";
-        byId("group-tag-datatype").style.display = "grid";
+        byId("tag-edit-id").value = "";
         byId("tag-source-key").value = "";
         byId("tag-name").value = "";
         byId("tag-display-name").value = "";
         byId("tag-unit").value = "";
         byId("tag-datatype").value = "float";
+        byId("tag-enabled").checked = true;
+        byId("group-tag-datatype").style.display = "grid";
+        byId("group-tag-enabled").style.display = "grid";
         byId("modal-tag").hidden = false;
         byId("key-picker-container").style.display = "none";
       });
@@ -600,13 +792,16 @@
           alert("Pilih node terlebih dahulu.");
           return;
         }
+        editingTagId = "";
         byId("modal-tag-title").textContent = "Tambah Actuator Tag";
         byId("tag-kind").value = "actuator";
-        byId("group-tag-datatype").style.display = "none";
+        byId("tag-edit-id").value = "";
         byId("tag-source-key").value = "";
         byId("tag-name").value = "";
         byId("tag-display-name").value = "";
         byId("tag-unit").value = "";
+        byId("group-tag-datatype").style.display = "none";
+        byId("group-tag-enabled").style.display = "none";
         byId("modal-tag").hidden = false;
         byId("key-picker-container").style.display = "none";
       });
@@ -629,8 +824,9 @@
           tag_name,
           display_name,
           unit,
-          enabled: true,
+          enabled: kind === "sensor" ? byId("tag-enabled").checked : true,
         };
+        if (editingTagId) body.id = editingTagId;
         if (kind === "sensor") body.data_type = data_type;
 
         const btnSubmit = byId("btn-submit-tag");
@@ -642,6 +838,7 @@
             ? `/api/module/nodes/${encodeURIComponent(activeNodeForTags)}/actuators`
             : `/api/module/nodes/${encodeURIComponent(activeNodeForTags)}/tags`;
           await apiCall("POST", endpoint, body);
+          editingTagId = "";
           byId("modal-tag").hidden = true;
           await loadTagsForNode(activeNodeForTags);
         } catch (err) {
@@ -649,6 +846,97 @@
         } finally {
           btnSubmit.disabled = false;
           btnSubmit.textContent = "Simpan Tag";
+        }
+      });
+    }
+
+    // Bulk replace sensor tags — PUT /nodes/{id}/tags (sebelumnya hanya POST single).
+    function showBulkError(msg) {
+      const el = byId("bulk-tags-error");
+      if (!el) return;
+      if (!msg) { el.style.display = "none"; el.textContent = ""; return; }
+      el.style.display = "block";
+      el.textContent = msg;
+    }
+
+    function validateBulkTags(arr) {
+      if (!Array.isArray(arr)) throw new Error("JSON harus berupa array, contoh: [{\"source_key\":\"...\",\"tag_name\":\"...\"}]");
+      if (arr.length === 0) throw new Error("Array kosong — bulk replace akan menghapus SEMUA sensor tags. Hapus manual satu per satu jika itu niat Anda, atau isi minimal 1 tag.");
+      const allowedTypes = ["float", "int", "bool"];
+      arr.forEach((t, i) => {
+        if (!t || typeof t !== "object") throw new Error(`Item #${i + 1} bukan object`);
+        if (!t.source_key || !String(t.source_key).trim()) throw new Error(`Item #${i + 1}: source_key wajib diisi`);
+        if (!t.tag_name || !String(t.tag_name).trim()) throw new Error(`Item #${i + 1}: tag_name wajib diisi`);
+        if (t.data_type && !allowedTypes.includes(t.data_type)) throw new Error(`Item #${i + 1}: data_type harus salah satu dari float/int/bool`);
+      });
+      return arr.map((t) => ({
+        source_key: String(t.source_key).trim(),
+        tag_name: String(t.tag_name).trim(),
+        display_name: String(t.display_name || "").trim(),
+        unit: String(t.unit || "").trim(),
+        data_type: t.data_type || "float",
+        enabled: t.enabled !== false,
+      }));
+    }
+
+    const btnBulk = byId("btn-bulk-sensor-tags");
+    if (btnBulk) {
+      btnBulk.addEventListener("click", () => {
+        if (!activeNodeForTags) { alert("Pilih node terlebih dahulu."); return; }
+        setText("bulk-tags-subtitle", `Node: ${activeNodeForTags} — operasi ini MENGGANTI SELURUH sensor tags`);
+        showBulkError("");
+        byId("bulk-tags-json").value = JSON.stringify(cachedSensorTags.map((t) => ({
+          source_key: t.source_key, tag_name: t.tag_name, display_name: t.display_name || "",
+          unit: t.unit || "", data_type: t.data_type || "float", enabled: t.enabled !== false,
+        })), null, 2);
+        byId("modal-bulk-tags").hidden = false;
+      });
+    }
+
+    const btnPrefill = byId("btn-bulk-tags-prefill");
+    if (btnPrefill) {
+      btnPrefill.addEventListener("click", () => {
+        byId("bulk-tags-json").value = JSON.stringify(cachedSensorTags.map((t) => ({
+          source_key: t.source_key, tag_name: t.tag_name, display_name: t.display_name || "",
+          unit: t.unit || "", data_type: t.data_type || "float", enabled: t.enabled !== false,
+        })), null, 2);
+        showBulkError("");
+      });
+    }
+
+    const formBulk = byId("form-bulk-tags");
+    if (formBulk) {
+      formBulk.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        showBulkError("");
+        let parsed;
+        try {
+          parsed = JSON.parse(byId("bulk-tags-json").value);
+        } catch (err) {
+          showBulkError("JSON tidak valid: " + err.message);
+          return;
+        }
+        let payload;
+        try {
+          payload = validateBulkTags(parsed);
+        } catch (err) {
+          showBulkError(err.message);
+          return;
+        }
+        if (!confirm(`Ganti SELURUH (${payload.length}) sensor tags node ${activeNodeForTags}? Tags lama yang tidak ada di daftar akan DIHAPUS.`)) return;
+        const btnSubmit = byId("btn-submit-bulk-tags");
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = "Mengganti...";
+        try {
+          await apiCall("PUT", `/api/module/nodes/${encodeURIComponent(activeNodeForTags)}/tags`, payload);
+          byId("modal-bulk-tags").hidden = true;
+          await loadTagsForNode(activeNodeForTags);
+          setStatus("success", `Bulk replace ${payload.length} sensor tags berhasil.`);
+        } catch (err) {
+          showBulkError("Gagal bulk replace: " + err.message);
+        } finally {
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = "Ganti Semua Tags";
         }
       });
     }

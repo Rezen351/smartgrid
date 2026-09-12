@@ -85,12 +85,18 @@
       <div class="table-card-head">
         <h3>Daftar Seluruh Node IoT</h3>
         <div class="table-filters">
-          <select id="filter-node-status" class="filter-select">
+          <select id="filter-node-status" class="filter-select" title="Filter status dari server">
             <option value="">Semua Status</option>
             <option value="online">Online</option>
             <option value="offline">Offline</option>
+            <option value="unknown">Unknown</option>
           </select>
-          <select id="filter-node-module" class="filter-select">
+          <select id="filter-node-paired" class="filter-select" title="Filter pairing dari server">
+            <option value="">Semua Pairing</option>
+            <option value="true">Paired</option>
+            <option value="false">Unpaired</option>
+          </select>
+          <select id="filter-node-module" class="filter-select" title="Filter modul dari server">
             <option value="">Semua Modul</option>
           </select>
         </div>
@@ -137,7 +143,11 @@
               <h4>Sensor Telemetry Tags</h4>
               <small>Metrik telemetri yang dipetakan dari payload firmware ke database time-series</small>
             </div>
-            <button type="button" class="btn-sm-primary" id="btn-add-sensor-tag">+ Tambah Sensor Tag</button>
+            <div class="tag-card-actions">
+              <button type="button" class="btn-sm-secondary" id="btn-bulk-sensor-tags"
+                title="Ganti seluruh sensor tags sekaligus (PUT /nodes/{id}/tags)">Bulk Replace</button>
+              <button type="button" class="btn-sm-primary" id="btn-add-sensor-tag">+ Tambah Sensor Tag</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table class="data-table">
@@ -206,11 +216,13 @@
       <input type="hidden" id="mod-edit-id" value="">
       <div class="form-group">
         <label for="mod-input-name">Nama Modul *</label>
-        <input type="text" id="mod-input-name" required placeholder="Contoh: Modul PLTS Barat">
+        <input type="text" id="mod-input-name" required placeholder="Contoh: Modul PLTS Barat"
+          pattern="[^<>]+" title="Nama tidak boleh mengandung karakter < atau >">
       </div>
       <div class="form-group">
         <label for="mod-input-desc">Deskripsi</label>
-        <input type="text" id="mod-input-desc" placeholder="Contoh: Monitoring inverter string 1-4">
+        <input type="text" id="mod-input-desc" placeholder="Contoh: Monitoring inverter string 1-4"
+          pattern="[^<>]*" title="Deskripsi tidak boleh mengandung karakter < atau >">
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" data-close-modal>Batal</button>
@@ -240,7 +252,8 @@
       </div>
       <div class="form-group">
         <label for="pair-node-name">Nama Node (Friendly Name)</label>
-        <input type="text" id="pair-node-name" placeholder="Contoh: Sensor Inverter 1">
+        <input type="text" id="pair-node-name" placeholder="Contoh: Sensor Inverter 1"
+          pattern="[^<>]*" title="Nama tidak boleh mengandung karakter < atau >">
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" data-close-modal>Batal</button>
@@ -258,6 +271,7 @@
       <button type="button" class="modal-close" data-close-modal>&times;</button>
     </div>
     <form id="form-tag">
+      <input type="hidden" id="tag-edit-id" value="">
       <input type="hidden" id="tag-kind" value="sensor">
       <div class="form-group">
         <label for="tag-source-key">Source Key (dari Firmware) *</label>
@@ -290,6 +304,9 @@
           <option value="bool">Boolean</option>
         </select>
       </div>
+      <div class="form-group" id="group-tag-enabled">
+        <label><input type="checkbox" id="tag-enabled" checked> Aktif</label>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" data-close-modal>Batal</button>
         <button type="submit" class="btn-primary" id="btn-submit-tag">Simpan Tag</button>
@@ -321,5 +338,101 @@
     <div class="modal-actions">
       <button type="button" class="btn-secondary" data-close-modal>Tutup</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal Node Detail (GET /nodes/{node_id}) -->
+<div class="modal-overlay" id="modal-node-detail" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3>Detail Node IoT</h3>
+        <small id="node-detail-subtitle">—</small>
+      </div>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <div class="node-detail-body">
+      <div class="node-detail-status" id="node-detail-status">—</div>
+      <dl class="node-detail-grid" id="node-detail-grid">
+        <div><dt>Node ID</dt><dd id="nd-node-id">—</dd></div>
+        <div><dt>Nama</dt><dd id="nd-name">—</dd></div>
+        <div><dt>Modul</dt><dd id="nd-module">—</dd></div>
+        <div><dt>Pairing</dt><dd id="nd-paired">—</dd></div>
+        <div><dt>MAC</dt><dd id="nd-mac">—</dd></div>
+        <div><dt>IP</dt><dd id="nd-ip">—</dd></div>
+        <div><dt>Firmware</dt><dd id="nd-fw">—</dd></div>
+        <div><dt>Terakhir Terlihat</dt><dd id="nd-last-seen">—</dd></div>
+        <div><dt>Ditemukan</dt><dd id="nd-discovered">—</dd></div>
+        <div><dt>Dibuat</dt><dd id="nd-created">—</dd></div>
+        <div><dt>Diperbarui</dt><dd id="nd-updated">—</dd></div>
+      </dl>
+    </div>
+    <div class="modal-actions node-detail-actions">
+      <button type="button" class="btn-secondary" data-close-modal>Tutup</button>
+      <button type="button" class="btn-sm-primary" id="btn-node-detail-live">Live Telemetry</button>
+      <button type="button" class="btn-sm-secondary" id="btn-node-detail-tags">Kelola Tags</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Module Detail (GET /modules/{id} + nodes) -->
+<div class="modal-overlay" id="modal-module-detail" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3 id="module-detail-title">Detail Modul</h3>
+        <small id="module-detail-subtitle">—</small>
+      </div>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <div class="node-detail-body">
+      <p class="module-card-desc" id="module-detail-desc">—</p>
+      <div class="module-detail-meta">
+        <span class="module-badge-nodes" id="module-detail-count">0 Node</span>
+        <span class="module-badge-nodes" id="module-detail-online">0 Online</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Node ID</th><th>Nama</th><th>Status</th><th>Aksi</th></tr>
+          </thead>
+          <tbody id="module-detail-nodes-body">
+            <tr><td colspan="4" class="table-empty">Memuat node modul...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" data-close-modal>Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Bulk Replace Sensor Tags (PUT /nodes/{id}/tags) -->
+<div class="modal-overlay" id="modal-bulk-tags" hidden>
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <h3>Bulk Replace Sensor Tags</h3>
+        <small id="bulk-tags-subtitle">Node: -</small>
+      </div>
+      <button type="button" class="modal-close" data-close-modal>&times;</button>
+    </div>
+    <form id="form-bulk-tags">
+      <div class="form-group">
+        <label for="bulk-tags-json">Daftar Tag (JSON Array) *</label>
+        <textarea id="bulk-tags-json" rows="10" spellcheck="false"
+          placeholder='[{"source_key":"pv_voltage","tag_name":"pv_voltage","display_name":"Tegangan PV","unit":"V","data_type":"float","enabled":true}]'></textarea>
+        <small class="form-hint">Mengganti <strong>seluruh</strong> sensor tags node ini. Field wajib per item:
+          <code>source_key</code>, <code>tag_name</code>. Opsional: <code>display_name</code>,
+          <code>unit</code>, <code>data_type</code> (float/int/bool), <code>enabled</code>.</small>
+        <small class="form-hint" id="bulk-tags-error" style="display:none;color:#b91c1c;"></small>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" data-close-modal>Batal</button>
+        <button type="button" class="btn-sm-secondary" id="btn-bulk-tags-prefill">Isi dari Tabel Saat Ini</button>
+        <button type="submit" class="btn-danger" id="btn-submit-bulk-tags">Ganti Semua Tags</button>
+      </div>
+    </form>
   </div>
 </div>

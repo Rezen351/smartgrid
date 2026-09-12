@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartGrid AI Energy Switching Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico">
+  <style>
+    :root {
+      --bg-main: #0a0f1d;
+      --bg-card: rgba(18, 26, 47, 0.75);
+      --bg-card-border: rgba(255, 255, 255, 0.08);
+      --primary: #38bdf8;
+      --solar: #f59e0b;
+      --solar-glow: rgba(245, 158, 11, 0.25);
+      --battery: #10b981;
+      --battery-glow: rgba(16, 185, 129, 0.25);
+      --genset-on: #ef4444;
+      --genset-on-glow: rgba(239, 68, 68, 0.35);
+      --genset-off: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg-main);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.6) 0px, transparent 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Navbar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 16px;
+      margin-bottom: 28px;
+    }
+
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #0284c7, #06b6d4);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+    }
+
+    .logo-title h1 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-title p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      border-color: var(--bg-card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: white;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5);
+      transform: translateY(-1px);
+    }
+
+    /* Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 960px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Preset Buttons */
+    .presets-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .preset-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--bg-card-border);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-pill:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--primary);
+      color: var(--text-main);
+    }
+
+    /* Sliders */
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-label-wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .control-label {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .control-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .slider {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* Slider Specific Colors */
+    .slider-load::-webkit-slider-thumb { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+    .slider-solar::-webkit-slider-thumb { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+    .slider-battery::-webkit-slider-thumb { background: #10b981; box-shadow: 0 0 10px #10b981; }
+
+    /* Main Decision Display Card */
+    .decision-hero {
+      text-align: center;
+      padding: 28px 20px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .decision-hero.state-off {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.08));
+      border: 2px solid #10b981;
+      box-shadow: 0 0 35px var(--battery-glow);
+    }
+
+    .decision-hero.state-on {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(245, 158, 11, 0.08));
+      border: 2px solid #ef4444;
+      box-shadow: 0 0 35px var(--genset-on-glow);
+    }
+
+    .decision-badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .state-off .decision-badge {
+      background: rgba(16, 185, 129, 0.25);
+      color: #34d399;
+      border: 1px solid #10b981;
+    }
+
+    .state-on .decision-badge {
+      background: rgba(239, 68, 68, 0.25);
+      color: #f87171;
+      border: 1px solid #ef4444;
+    }
+
+    .decision-title {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .state-off .decision-title { color: #34d399; }
+    .state-on .decision-title { color: #f87171; }
+
+    .decision-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    /* Reason Box */
+    .reason-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .reason-header {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .guardrail-active {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(245, 158, 11, 0.2);
+      color: #fcd34d;
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    /* System Stats Grid */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* Pulse animation */
+    .live-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <div class="logo-badge">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-title">
+        <h1>SmartGrid AI Energy Switching</h1>
+        <p>Pengendali Otomatis Energi: Panel Surya, Baterai, & Genset</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" id="btn-sync-live" title="Ambil sampel data dari server ITB">
+        <span class="live-dot"></span> Ambil Sensor Server TF
+      </button>
+      <a href="/docs" target="_blank" class="btn btn-primary">
+        📖 Swagger Docs
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Grid -->
+  <div class="dashboard-grid">
+    <!-- Kolom Kiri: Simulator Kendali Listrik -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🎛️ Simulator Parameter Kelistrikan</div>
+        <span style="font-size: 12px; color: var(--text-muted);">Geser untuk simulasi</span>
+      </div>
+
+      <!-- Presets -->
+      <div class="presets-container">
+        <button class="preset-pill" onclick="applyPreset('solar_excess')">☀️ Siang Terik (Surya Cukup)</button>
+        <button class="preset-pill" onclick="applyPreset('night_peak')">🌙 Malam Beban Tinggi</button>
+        <button class="preset-pill" onclick="applyPreset('battery_low')">⚠️ Baterai Kritis (< 15%)</button>
+        <button class="preset-pill" onclick="applyPreset('battery_full')">🔋 Baterai Penuh (95%)</button>
+      </div>
+
+      <!-- Slider 1: Beban Konsumen (Load) -->
+      <div class="control-group">
+        <div class="control-label-wrap">
+          <span class="control-label">🏢 Kebutuhan Beban Listrik (Load)</span>
+          <span class="control-value" id="val-load">40.0 kW</span>
+        </div>
+        <input type="range" class="slider slider-load" id="input-load" min="5" max="100" step="0.5" value="40">
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Total konsumsi daya peralatan & penerangan yang sedang aktif.</p>
+      </div>
+
+      <!-- Slider 2: Panel Surya (PV) -->
+      <div class="control-group">
+        <div class="control-label-wrap">
+          <span class="control-label">☀️ Produksi Panel Surya (Solar PV)</span>
+          <span class="control-value" id="val-solar">15.0 kW</span>
+        </div>
+        <input type="range" class="slider slider-solar" id="input-solar" min="0" max="100" step="0.5" value="15">
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Daya listrik gratis yang dihasilkan oleh sinar matahari.</p>
+      </div>
+
+      <!-- Slider 3: Level Baterai (SOC) -->
+      <div class="control-group">
+        <div class="control-label-wrap">
+          <span class="control-label">🔋 Kapasitas Baterai (SOC %)</span>
+          <span class="control-value" id="val-battery">55.0%</span>
+        </div>
+        <input type="range" class="slider slider-battery" id="input-battery" min="5" max="100" step="1" value="55">
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Level daya simpan baterai (di bawah 15% masuk zona bahaya).</p>
+      </div>
+
+      <!-- Slider 4: Jam Simulasi -->
+      <div class="control-group">
+        <div class="control-label-wrap">
+          <span class="control-label">🕒 Waktu / Jam Operasional</span>
+          <span class="control-value" id="val-hour">14:00 (Siang)</span>
+        </div>
+        <input type="range" class="slider" id="input-hour" min="0" max="23.75" step="0.25" value="14">
+      </div>
+    </div>
+
+    <!-- Kolom Kanan: Rekomendasi Keputusan AI -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🤖 Keputusan Otomatis Sistem</div>
+        <span style="font-size: 12px; color: #38bdf8;">Random Forest + Guardrail</span>
+      </div>
+
+      <!-- Decision Big Box -->
+      <div class="decision-hero state-off" id="decision-hero">
+        <span class="decision-badge" id="decision-badge">GENSET STANDBY (OFF)</span>
+        <div class="decision-title" id="decision-title">GENSET MATI</div>
+        <div class="decision-subtitle" id="decision-subtitle">
+          Listrik disuplai sepenuhnya oleh <strong>Panel Surya & Baterai</strong> (Hemat Bahan Bakar 100%).
+        </div>
+      </div>
+
+      <!-- Reason Box -->
+      <div class="reason-box">
+        <div class="reason-header">💡 Penjelasan Keputusan:</div>
+        <p id="decision-reason">Memuat keputusan AI...</p>
+        <div id="guardrail-badge-wrap"></div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Tingkat Keyakinan AI</div>
+          <div class="stat-val" id="stat-confidence">98.5%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Defisit Beban Bersih</div>
+          <div class="stat-val" id="stat-net-load">25.0 kW</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Akurasi Model</div>
+          <div class="stat-val" style="color: #34d399;">97.7%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let debounceTimeout = null;
+
+  const inputLoad = document.getElementById('input-load');
+  const inputSolar = document.getElementById('input-solar');
+  const inputBattery = document.getElementById('input-battery');
+  const inputHour = document.getElementById('input-hour');
+
+  const valLoad = document.getElementById('val-load');
+  const valSolar = document.getElementById('val-solar');
+  const valBattery = document.getElementById('val-battery');
+  const valHour = document.getElementById('val-hour');
+
+  const hero = document.getElementById('decision-hero');
+  const badge = document.getElementById('decision-badge');
+  const title = document.getElementById('decision-title');
+  const subtitle = document.getElementById('decision-subtitle');
+  const reason = document.getElementById('decision-reason');
+  const guardrailWrap = document.getElementById('guardrail-badge-wrap');
+  const statConfidence = document.getElementById('stat-confidence');
+  const statNetLoad = document.getElementById('stat-net-load');
+
+  function updateLabels() {
+    valLoad.textContent = parseFloat(inputLoad.value).toFixed(1) + ' kW';
+    valSolar.textContent = parseFloat(inputSolar.value).toFixed(1) + ' kW';
+    valBattery.textContent = parseFloat(inputBattery.value).toFixed(1) + '%';
+    
+    const h = parseFloat(inputHour.value);
+    const hours = Math.floor(h);
+    const minutes = Math.round((h - hours) * 60);
+    const timeStr = String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    const isDay = (h >= 6 && h <= 18);
+    valHour.textContent = `${timeStr} (${isDay ? 'Siang' : 'Malam'})`;
+  }
+
+  async function calculateDecision() {
+    updateLabels();
+
+    const payload = {
+      load_kw: parseFloat(inputLoad.value),
+      pv_kw: parseFloat(inputSolar.value),
+      soc_pct: parseFloat(inputBattery.value),
+      hour: parseFloat(inputHour.value)
+    };
+
+    try {
+      const res = await fetch('/predict-switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (!json.success) return;
+
+      const data = json.data;
+      const isGensetOn = data.genset_switch === 1;
+
+      // Update Card Visuals
+      if (isGensetOn) {
+        hero.className = 'decision-hero state-on';
+        badge.textContent = 'GENSET MENYALA (ON)';
+        title.textContent = 'NYALAKAN GENERATOR';
+        subtitle.innerHTML = 'Baterai atau surya tidak cukup. Generator aktif memasok listrik untuk mencegah padam.';
+      } else {
+        hero.className = 'decision-hero state-off';
+        badge.textContent = 'GENSET STANDBY (OFF)';
+        title.textContent = 'GUNAKAN SURYA & BATERAI';
+        subtitle.innerHTML = 'Listrik disuplai sepenuhnya oleh <strong>Panel Surya & Baterai</strong> (Hemat Bahan Bakar 100%).';
+      }
+
+      reason.textContent = data.reason;
+
+      if (data.guardrail_triggered) {
+        guardrailWrap.innerHTML = `<span class="guardrail-active">🛡️ Aturan Proteksi Kelistrikan Aktif: ${data.guardrail_rule}</span>`;
+      } else {
+        guardrailWrap.innerHTML = `<span style="font-size: 11px; color: #38bdf8;">🤖 Keputusan Murni Prediksi AI (Random Forest)</span>`;
+      }
+
+      statConfidence.textContent = (data.confidence * 100).toFixed(1) + '%';
+      statNetLoad.textContent = (data.input_parameters.net_load_kw).toFixed(1) + ' kW';
+
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function triggerCalc() {
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(calculateDecision, 60);
+  }
+
+  [inputLoad, inputSolar, inputBattery, inputHour].forEach(el => {
+    el.addEventListener('input', triggerCalc);
+  });
+
+  function applyPreset(name) {
+    if (name === 'solar_excess') {
+      inputLoad.value = 25;
+      inputSolar.value = 75;
+      inputBattery.value = 80;
+      inputHour.value = 12;
+    } else if (name === 'night_peak') {
+      inputLoad.value = 65;
+      inputSolar.value = 0;
+      inputBattery.value = 30;
+      inputHour.value = 19.5;
+    } else if (name === 'battery_low') {
+      inputLoad.value = 40;
+      inputSolar.value = 5;
+      inputBattery.value = 10;
+      inputHour.value = 15;
+    } else if (name === 'battery_full') {
+      inputLoad.value = 35;
+      inputSolar.value = 20;
+      inputBattery.value = 95;
+      inputHour.value = 11;
+    }
+    calculateDecision();
+  }
+
+  // Tombol sinkronisasi server TF
+  document.getElementById('btn-sync-live').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-sync-live');
+    btn.textContent = '⏳ Mengambil...';
+    try {
+      const res = await fetch('/sync-and-predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_id: "SmartGrid-01", fallback_pv_kw: 15.0, fallback_soc_pct: 60.0 })
+      });
+      const data = await res.json();
+      if (data.success) {
+        inputLoad.value = data.data.input_parameters.load_kw;
+        inputSolar.value = data.data.input_parameters.pv_kw;
+        inputBattery.value = data.data.input_parameters.soc_pct;
+        inputHour.value = data.data.input_parameters.hour;
+        calculateDecision();
+        alert(`Berhasil mengambil telemetri dari node SmartGrid-01!\nNilai sensor: ${data.data.input_parameters.load_kw} kW`);
+      }
+    } catch (e) {
+      alert('Gagal mengambil telemetri live.');
+    } finally {
+      btn.innerHTML = '<span class="live-dot"></span> Ambil Sensor Server TF';
+    }
+  });
+
+  // Jalankan saat pertama load
+  calculateDecision();
+</script>
+
+</body>
+</html>
