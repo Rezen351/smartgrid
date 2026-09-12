@@ -1,0 +1,384 @@
+openapi: 3.0.3
+info:
+  title: SmartGrid ML API
+  version: 1.0.0
+  description: |
+    Kontrak statis untuk ML Service SmartGrid Energy Switching.
+    Endpoint utama:
+      - /predict-switch: prediksi switching manual
+      - /sync-and-predict: prediksi dengan sinkronisasi telemetri
+      - /openapi: spesifikasi OpenAPI dalam format YAML
+servers:
+  - url: http://localhost:8000
+    description: ML service langsung
+  - url: http://localhost:3001/api/v1/ml
+    description: Melalui Nginx Reverse Proxy
+tags:
+  - name: Sistem
+    description: Endpoint status dan metadata service.
+  - name: "Machine Learning"
+    description: Inferensi keputusan switching genset vs PV & baterai.
+  - name: Web Visual Dashboard
+    description: Antarmuka visual interaktif simulator.
+paths:
+  /health:
+    get:
+      tags: [Sistem]
+      summary: Health check service dan model
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service sehat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                model_loaded: true
+                features:
+                  - load_kw
+                  - pv_kw
+                  - net_load_kw
+                  - soc_pct
+                  - hour
+                  - is_daytime
+        '500':
+          description: Service tidak siap atau model gagal dimuat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+  /api/info:
+    get:
+      tags: [Sistem]
+      summary: Metadata teknis dan metrik model
+      operationId: apiInfo
+      responses:
+        '200':
+          description: Informasi service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiInfoResponse'
+        '500':
+          description: Kesalahan internal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+  /predict-switch:
+    post:
+      tags: ["Machine Learning"]
+      summary: Prediksi switching manual
+      operationId: predictSwitch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictRequest'
+            example:
+              load_kw: 40.0
+              pv_kw: 10.0
+              soc_pct: 55.0
+              hour: 14.0
+      responses:
+        '200':
+          description: Hasil prediksi switching
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictResponse'
+              example:
+                success: true
+                data:
+                  genset_switch: 1
+                  action: GENSET_ON
+                  power_source: GENERATOR
+                  confidence: 0.9729
+                  guardrail_triggered: false
+                  guardrail_rule: null
+                  reason: "Model ML menyarankan Genset MENYALA (Confidence: 97.3%) berdasarkan optimalisasi pola historis smartgrid."
+                  input_parameters:
+                    load_kw: 40.0
+                    pv_kw: 10.0
+                    net_load_kw: 30.0
+                    soc_pct: 55.0
+                    hour: 14.0
+                    is_daytime: 1
+        '422':
+          description: Request body tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Kesalahan inferensi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+  /sync-and-predict:
+    post:
+      tags: ["Machine Learning"]
+      summary: Prediksi switching dengan sinkronisasi telemetri
+      operationId: syncAndPredict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPredictRequest'
+            example:
+              node_id: SmartGrid-01
+              fallback_pv_kw: 15.0
+              fallback_soc_pct: 60.0
+      responses:
+        '200':
+          description: Hasil prediksi switching + data telemetri sumber
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPredictResponse'
+        '404':
+          description: Telemetri untuk node tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '422':
+          description: Request body tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Kesalahan sinkronisasi atau inferensi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+  /openapi:
+    get:
+      tags: [Sistem]
+      summary: Spesifikasi OpenAPI untuk ML Service
+      operationId: openApiSpec
+      responses:
+        '200':
+          description: Spesifikasi OpenAPI dalam format YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+        '404':
+          description: Spesifikasi OpenAPI tidak ditemukan
+  /openapi.yaml:
+    get:
+      tags: [Sistem]
+      summary: Alias spesifikasi OpenAPI dalam format YAML
+      operationId: openApiSpecYaml
+      responses:
+        '200':
+          description: Spesifikasi OpenAPI dalam format YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+        '404':
+          description: Spesifikasi OpenAPI tidak ditemukan
+components:
+  schemas:
+    PredictRequest:
+      type: object
+      required:
+        - load_kw
+        - soc_pct
+      properties:
+        load_kw:
+          type: number
+          format: float
+          description: Kebutuhan beban listrik pengguna dalam kW
+        pv_kw:
+          type: number
+          format: float
+          default: 0.0
+          description: Daya yang dihasilkan panel surya dalam kW
+        soc_pct:
+          type: number
+          format: float
+          description: Level kapasitas baterai saat ini dalam %
+        timestamp:
+          type: string
+          format: date-time
+          description: Waktu pengukuran dalam format ISO8601
+        hour:
+          type: number
+          format: float
+          description: Jam dalam desimal 0.0 - 23.9
+    SyncPredictRequest:
+      type: object
+      properties:
+        node_id:
+          type: string
+          default: SmartGrid-01
+          description: ID node telemetri
+        fallback_pv_kw:
+          type: number
+          format: float
+          default: 0.0
+          description: Estimasi PV jika sensor belum terpasang
+        fallback_soc_pct:
+          type: number
+          format: float
+          default: 50.0
+          description: Estimasi SOC jika sensor belum terpasang
+    InputParametersResponse:
+      type: object
+      required:
+        - load_kw
+        - pv_kw
+        - net_load_kw
+        - soc_pct
+        - hour
+        - is_daytime
+      properties:
+        load_kw:
+          type: number
+          format: float
+        pv_kw:
+          type: number
+          format: float
+        net_load_kw:
+          type: number
+          format: float
+        soc_pct:
+          type: number
+          format: float
+        hour:
+          type: number
+          format: float
+        is_daytime:
+          type: integer
+          enum: [0, 1]
+    PredictionResult:
+      type: object
+      required:
+        - genset_switch
+        - action
+        - power_source
+        - confidence
+        - guardrail_triggered
+        - guardrail_rule
+        - reason
+        - input_parameters
+      properties:
+        genset_switch:
+          type: integer
+          enum: [0, 1]
+        action:
+          type: string
+          enum: [GENSET_ON, GENSET_OFF]
+        power_source:
+          type: string
+          enum: [GENERATOR, SOLAR_PV_AND_BATTERY]
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        guardrail_triggered:
+          type: boolean
+        guardrail_rule:
+          type: string
+          nullable: true
+          enum: [CRITICAL_LOW_SOC_PROTECTION, EXCESS_SOLAR_PROTECTION, HIGH_SOC_SUPPLY]
+        reason:
+          type: string
+        input_parameters:
+          $ref: '#/components/schemas/InputParametersResponse'
+    PredictResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/PredictionResult'
+    SyncPredictResponse:
+      type: object
+      required: [success, source_telemetry, data]
+      properties:
+        success:
+          type: boolean
+        source_telemetry:
+          type: object
+          additionalProperties: true
+        data:
+          $ref: '#/components/schemas/PredictionResult'
+    ApiInfoResponse:
+      type: object
+      required:
+        - service
+        - version
+        - status
+        - docs_url
+        - model_metrics
+      properties:
+        service:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+        docs_url:
+          type: string
+        model_metrics:
+          type: object
+          additionalProperties: true
+    HealthResponse:
+      type: object
+      required: [status, model_loaded, features]
+      properties:
+        status:
+          type: string
+        model_loaded:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  oneOf:
+                    - type: string
+                    - type: integer
+              msg:
+                type: string
+              type:
+                type: string
+    HttpError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+  responses:
+    ServiceError:
+      description: Terjadi kesalahan internal
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HttpError'
+          example:
+            detail: export failed

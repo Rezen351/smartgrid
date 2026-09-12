@@ -195,6 +195,13 @@ services:
       - nats
     networks: [ smartgrid-network ]
     restart: unless-stopped
+  postgres-auth-exporter:
+    image: wrouesnel/postgres_exporter:latest
+    container_name: smartgrid-postgres-auth-exporter
+    environment:
+      DATA_SOURCE_NAME: ${AUTH_POSTGRES_DSN:-postgresql://${AUTH_DB_USER:-auth_user}:${AUTH_DB_PASSWORD}@postgres-auth:5432/${AUTH_DB_NAME:-auth_db}?sslmode=disable}
+    networks: [ smartgrid-network ]
+    restart: unless-stopped
   #===============Service Export=====================
   export:
     build:
@@ -223,13 +230,6 @@ services:
       SMARTGRID_API_URL: http://nginx:80/api/v1
       SMARTGRID_USERNAME: ${AUTH_ADMIN_USERNAME:-admin}
       SMARTGRID_PASSWORD: ${AUTH_ADMIN_PASSWORD}
-    networks: [ smartgrid-network ]
-    restart: unless-stopped
-  postgres-auth-exporter:
-    image: wrouesnel/postgres_exporter:latest
-    container_name: smartgrid-postgres-auth-exporter
-    environment:
-      DATA_SOURCE_NAME: ${AUTH_POSTGRES_DSN:-postgresql://${AUTH_DB_USER:-auth_user}:${AUTH_DB_PASSWORD}@postgres-auth:5432/${AUTH_DB_NAME:-auth_db}?sslmode=disable}
     networks: [ smartgrid-network ]
     restart: unless-stopped
 
@@ -287,8 +287,7 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command:
       - >-
-        printf '[client]\nhost=%s\nport=%s\nuser=%s\npassword=%s\n' "$${MYSQLD_HOST}" "$${MYSQLD_PORT}" "$${MYSQLD_USER}" "$${MYSQLD_PASSWORD}" > /tmp/.my.cnf
-        && exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
+        printf '[client]\nhost=%s\nport=%s\nuser=%s\npassword=%s\n' "$${MYSQLD_HOST}" "$${MYSQLD_PORT}" "$${MYSQLD_USER}" "$${MYSQLD_PASSWORD}" > /tmp/.my.cnf && exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf
     networks: [ smartgrid-network ]
     restart: unless-stopped
 

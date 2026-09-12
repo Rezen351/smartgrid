@@ -65,10 +65,11 @@
 
 /* Tables & Cards */
 .nodes-table-card, .tag-section-card { border: 1px solid var(--slate-300); border-radius: var(--radius-md); background: #fff; box-shadow: 0 2px 8px rgba(16, 36, 49, .04); overflow: hidden; margin-bottom: 20px; }
-.table-card-head, .tag-card-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--slate-200); background: #fafaf7; }
+.table-card-head, .tag-card-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--slate-200); background: #fafaf7; gap: 10px; flex-wrap: wrap; }
 .table-card-head h3, .tag-card-head h4 { margin: 0; font-size: 15px; color: var(--institution-blue-deep); }
 .tag-card-head small { color: var(--slate-500); font-size: 12px; }
-.table-filters { display: flex; align-items: center; gap: 10px; }
+.tag-card-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.table-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .filter-select, .node-picker-select, .form-select { height: 34px; padding: 4px 12px; border: 1px solid var(--slate-300); border-radius: 5px; background: #fff; color: var(--slate-800); font-size: 12px; font-weight: 600; cursor: pointer; }
 .node-picker-select { min-width: 260px; height: 38px; font-size: 13px; }
 .tags-selector-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--slate-300); border-radius: var(--radius-md); background: #fff; }
@@ -136,7 +137,19 @@
 .key-picker-item.is-object code { color: var(--slate-500); }
 .key-picker-item.is-object small { color: var(--institution-blue); font-weight: 700; }
 .key-picker-empty { padding: 20px 14px; text-align: center; color: var(--slate-400); font-size: 12px; }
-.modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--slate-200); }
+.modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--slate-200); flex-wrap: wrap; }
+
+/* Node / Module detail modal */
+.node-detail-body { display: grid; gap: 14px; padding: 4px 0; }
+.node-detail-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.node-detail-status small { color: var(--slate-500); font-size: 11px; }
+.node-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 0; }
+.node-detail-grid > div { border: 1px solid var(--slate-200); border-radius: 6px; padding: 8px 10px; background: #fbfbf8; min-width: 0; }
+.node-detail-grid dt { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--slate-500); margin-bottom: 2px; }
+.node-detail-grid dd { margin: 0; font-size: 12.5px; color: var(--slate-800); word-break: break-all; }
+.node-detail-actions { justify-content: space-between; }
+.module-detail-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+#bulk-tags-json { font-family: monospace; font-size: 12px; min-height: 220px; resize: vertical; }
 
 /* Live Telemetry Inspector */
 .modal-body { padding: 8px 0; }
@@ -153,6 +166,8 @@
   .modules-kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .modules-grid { grid-template-columns: 1fr; }
   .discovered-cards { grid-template-columns: 1fr; }
+  .node-detail-grid { grid-template-columns: 1fr; }
+  .node-detail-actions { flex-direction: column-reverse; align-items: stretch; }
 }
 
 @media (max-width: 480px) {

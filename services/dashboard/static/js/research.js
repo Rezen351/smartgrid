@@ -192,6 +192,7 @@
     Object.entries(params || {}).forEach(([key, value]) => {
       if (value !== "" && value !== null && value !== undefined) url.searchParams.set(key, value);
     });
+    await ensureValidToken();
     const options = {
       method: method || "GET",
       headers: Object.assign({}, authHeaders(), { "Content-Type": "application/json" }),

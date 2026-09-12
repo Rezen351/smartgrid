@@ -67,6 +67,13 @@ python3 -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 Dokumentasi interaktif Swagger UI akan otomatis tersedia di: [http://localhost:8000/docs](http://localhost:8000/docs).
 
+Spesifikasi OpenAPI statis:
+- YAML: [http://localhost:8000/openapi.yaml](http://localhost:8000/openapi.yaml)
+- JSON via FastAPI: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
+
+Melalui reverse proxy nginx:
+- `curl -sS http://localhost:3001/api/v1/ml/openapi`
+
 ### 3. Menggunakan Docker
 ```bash
 # Build dan jalankan container

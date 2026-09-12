@@ -4,7 +4,7 @@ Menyediakan REST API & Visual Interactive Simulator untuk inferensi keputusan
 switching On-Off generator vs panel surya & baterai.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Literal, Optional
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
@@ -29,7 +29,13 @@ app = FastAPI(
     description=description_md,
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    openapi_tags=[
+        {"name": "Sistem", "description": "Endpoint status dan metadata service."},
+        {"name": "Machine Learning", "description": "Inferensi keputusan switching genset vs PV & baterai."},
+        {"name": "Web Visual Dashboard", "description": "Antarmuka visual interaktif simulator."},
+    ],
 )
 
 # Aktifkan CORS agar frontend dapat memanggil API tanpa kendala
@@ -60,6 +66,54 @@ class SyncPredictRequest(BaseModel):
     fallback_soc_pct: float = Field(50.0, description="Nilai estimasi SOC jika belum dipasang di sensor (%)")
 
 
+class InputParametersResponse(BaseModel):
+    load_kw: float
+    pv_kw: float
+    net_load_kw: float
+    soc_pct: float
+    hour: float
+    is_daytime: int
+
+
+class PredictionResult(BaseModel):
+    genset_switch: Literal[0, 1]
+    action: Literal["GENSET_ON", "GENSET_OFF"]
+    power_source: Literal["GENERATOR", "SOLAR_PV_AND_BATTERY"]
+    confidence: float
+    guardrail_triggered: bool
+    guardrail_rule: Optional[str]
+    reason: str
+    input_parameters: InputParametersResponse
+
+
+class PredictResponse(BaseModel):
+    success: bool
+    data: PredictionResult
+
+
+class SyncPredictResponse(BaseModel):
+    success: bool
+    source_telemetry: Dict[str, Any]
+    data: PredictionResult
+
+
+class ApiInfoResponse(BaseModel):
+    service: str
+    version: str
+    status: str
+    docs_url: str
+    model_metrics: Dict[str, Any]
+
+
+class HealthResponse(BaseModel):
+    status: str
+    model_loaded: bool
+    features: List[str]
+
+
+OPENAPI_FILE = Path(__file__).resolve().parent / "openapi.yaml"
+
+
 @app.get("/", response_class=HTMLResponse, tags=["Web Visual Dashboard"])
 def visual_dashboard():
     """
@@ -78,8 +132,8 @@ def favicon():
     return Response(content=svg, media_type="image/svg+xml")
 
 
-@app.get("/api/info", tags=["Sistem"])
-def api_info():
+@app.get("/api/info", response_model=ApiInfoResponse, tags=["Sistem"])
+def api_info() -> ApiInfoResponse:
     """Metadata teknis tentang versi model dan metrik akurasi."""
     return {
         "service": "SmartGrid Energy Switching ML Microservice",
@@ -90,8 +144,8 @@ def api_info():
     }
 
 
-@app.get("/health", tags=["Sistem"])
-def health_check():
+@app.get("/health", response_model=HealthResponse, tags=["Sistem"])
+def health_check() -> HealthResponse:
     """Status kesehatan container dan model."""
     return {
         "status": "ok",
@@ -100,8 +154,8 @@ def health_check():
     }
 
 
-@app.post("/predict-switch", tags=["Machine Learning"])
-def predict_switch(req: PredictRequest):
+@app.post("/predict-switch", response_model=PredictResponse, tags=["Machine Learning"])
+def predict_switch(req: PredictRequest) -> PredictResponse:
     """
     Menghitung rekomendasi switching On-Off generator vs baterai & PV berdasarkan parameter listrik.
     """
@@ -121,8 +175,8 @@ def predict_switch(req: PredictRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/sync-and-predict", tags=["Machine Learning"])
-def sync_and_predict(req: SyncPredictRequest):
+@app.post("/sync-and-predict", response_model=SyncPredictResponse, tags=["Machine Learning"])
+def sync_and_predict(req: SyncPredictRequest) -> SyncPredictResponse:
     """
     Menarik data telemetri live dari server SmartGrid (Export API Almuzky)
     lalu secara otomatis menghitung rekomendasi switching.
@@ -155,6 +209,34 @@ def sync_and_predict(req: SyncPredictRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gagal sinkronisasi telemetri: {str(e)}")
+
+
+def _read_openapi_spec() -> Response:
+    if not OPENAPI_FILE.exists():
+        raise HTTPException(status_code=404, detail="OpenAPI specification not found")
+    return Response(content=OPENAPI_FILE.read_text(encoding="utf-8"), media_type="application/yaml")
+
+
+@app.get("/openapi.yaml", include_in_schema=False)
+def openapi_yaml_spec() -> Response:
+    """Alias untuk spesifikasi OpenAPI dalam format YAML."""
+    return _read_openapi_spec()
+
+
+@app.get(
+    "/openapi",
+    include_in_schema=False,
+    responses={
+        200: {
+            "description": "Spesifikasi OpenAPI untuk ML Service dalam format YAML",
+            "content": {"application/yaml": {"schema": {"type": "string"}}},
+        },
+        404: {"description": "Spesifikasi OpenAPI tidak ditemukan"},
+    },
+)
+def openapi_spec() -> Response:
+    """Spesifikasi OpenAPI statis untuk ML Service."""
+    return _read_openapi_spec()
 
 
 if __name__ == "__main__":
