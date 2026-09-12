@@ -1,0 +1,32 @@
+services:
+  ml:
+    build:
+      context: ./services/ml
+      dockerfile: Dockerfile
+    container_name: smartgrid-ml
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      SMARTGRID_API_URL: http://nginx:80/api/v1
+      SMARTGRID_USERNAME: ${AUTH_ADMIN_USERNAME:-admin}
+      SMARTGRID_PASSWORD: ${AUTH_ADMIN_PASSWORD}
+    networks:
+      - smartgrid-network
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: smartgrid-ml-cloudflared
+    command: [ "tunnel", "run" ]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./infra/cloudflared/ml-config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - smartgrid-network
+    restart: unless-stopped
+
+networks:
+  smartgrid-network:
+    external: true

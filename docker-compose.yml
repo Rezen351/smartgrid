@@ -14,7 +14,6 @@ services:
       - dashboard
       - auth
       - export
-      - ml
     networks: [ smartgrid-network ]
     restart: unless-stopped
   nginx-exporter:
@@ -217,22 +216,6 @@ services:
       - timescaledb-module
     networks: [ smartgrid-network ]
     restart: unless-stopped
-  #===============Service Machine Learning=====================
-  ml:
-    build:
-      context: ./services/ml
-      dockerfile: Dockerfile
-    container_name: smartgrid-ml
-    ports:
-      - "8000:8000"
-    environment:
-      PORT: 8000
-      SMARTGRID_API_URL: http://nginx:80/api/v1
-      SMARTGRID_USERNAME: ${AUTH_ADMIN_USERNAME:-admin}
-      SMARTGRID_PASSWORD: ${AUTH_ADMIN_PASSWORD}
-    networks: [ smartgrid-network ]
-    restart: unless-stopped
-
   #===============Service Module=====================
   module:
     build:

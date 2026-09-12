@@ -1,0 +1,6 @@
+tunnel: smartgrid-ml-tunnel
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: ml.yourdomain.com
+    service: http://ml:8000
+  - service: http_status:404
